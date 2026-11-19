@@ -9,6 +9,7 @@
 :root[data-theme="dark"] { color-scheme: dark; --bg: #0b1020; --surface: #121b36; --surface-2: #1a2446; --ink: #e9edf8; --muted: #9aa6c8; --line: #26335e; --accent: #f2cf1d; --accent-bg: #f2cf1d; --on-accent: #0b1020; --good: #5fd34a; --danger: #ff8a8a; --warn: #f2cf1d; }
 
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 html, body { height: 100%; }
 body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 16px; line-height: 1.5; -webkit-text-size-adjust: 100%; }
 h1, h2, h3 { font-family: var(--font-display); margin: 0; line-height: 1.15; letter-spacing: .02em; text-wrap: balance; }
