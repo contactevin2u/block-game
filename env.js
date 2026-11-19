@@ -4,5 +4,5 @@
    - apiBase empty and no server: browser-only test mode, everything stored in this browser. */
 window.APP_ENV = {
   mode: 'auto',
-  apiBase: ''   // e.g. 'https://block-game-api.onrender.com'  (no trailing slash)
+  apiBase: 'https://block-game-api.onrender.com'   // the Render server (no trailing slash)
 };
