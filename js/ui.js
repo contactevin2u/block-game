@@ -262,7 +262,7 @@
           '<button type="button" class="link-btn" data-cancel>Cancel and go back</button>';
       } else {
         var m = C.PAYMENT_METHODS.filter(function (x) { return x.id === o.method; })[0] || C.PAYMENT_METHODS[0];
-        var instr = { tng: 'Open the Touch \'n Go eWallet app on your phone and approve the payment request.', fpx: 'You are now on your bank\'s login page. Log in and approve the transfer.', duitnow: 'Scan the QR code with your banking app, or approve in the app that opened.', card: 'Enter your card details, then approve the one-time password from your bank.', applepay: 'Confirm with Face ID or Touch ID.' }[m.id];
+        var instr = { tng: 'Open the Touch \'n Go eWallet app on your phone and approve the payment request.', fpx: 'You are now on your bank\'s login page. Log in and approve the transfer.', card: 'Enter your card details, then approve the one-time password from your bank.', applepay: 'Confirm with Face ID or Touch ID.' }[m.id];
         box.innerHTML = gw + '<h1>' + esc(m.name) + '</h1>' + summary + '<div class="card approve"><p>' + instr + '</p><p class="muted small">In the real flow this screen belongs to the bank or wallet. Approve or cancel below to simulate the result.</p>' +
           '<button type="button" class="btn btn-primary" data-approve>Approve payment</button><button type="button" class="btn btn-secondary" data-cancel>Cancel</button></div>';
       }

@@ -35,8 +35,7 @@ window.CONFIG = {
   ],
   PAYMENT_METHODS: [
     { id: 'tng', name: "Touch 'n Go eWallet", how: 'Opens the TNG app to approve', fee: '1 to 1.5%' },
-    { id: 'fpx', name: 'Online banking (FPX)', how: 'Redirects to your bank login', fee: 'RM 1 flat' },
-    { id: 'duitnow', name: 'DuitNow', how: 'QR code or your banking app', fee: '1 to 1.5%' },
+    { id: 'fpx', name: 'Online banking (FPX / DuitNow)', how: 'Redirects to your bank login', fee: 'RM 1 flat' },
     { id: 'card', name: 'Credit or debit card', how: 'Card form, then bank 3-D Secure', fee: '1.8 to 3%' },
     { id: 'applepay', name: 'Apple Pay', how: 'Face ID or Touch ID', fee: 'As card', appleOnly: true }
   ]
