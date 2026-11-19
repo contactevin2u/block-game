@@ -172,7 +172,7 @@
     var adv = u.adventure || { unlocked: 1 };
     return '<div class="topbar">' + logo() + (guest ? '<a class="link" href="#/create">Create account</a>' : '<a class="link muted" href="#/" data-logout>Log out</a>') + '</div>' +
       (guest ? '<div class="notice"><b>Playing as guest</b><p>Progress stays on this device only. <a class="link" href="#/create">Create an account</a> to keep it everywhere.</p></div>' : '<p class="eyebrow">Logged in as</p><h1 class="email">' + esc(u.email) + '</h1>') +
-      '<div class="stat-row"><div class="stat-card"><span>Best</span><b>' + (u.bestScore || 0).toLocaleString() + '</b></div><div class="stat-card"><span>Level</span><b>' + (u.bestLevel || 1) + '</b></div><div class="stat-card"><span>Coins</span><b class="accent">' + (u.coins || 0).toLocaleString() + '</b></div></div>' +
+      '<div class="stat-row"><div class="stat-card"><span>Ranked best</span><b>' + (u.bestScore || 0).toLocaleString() + '</b></div><div class="stat-card"><span>Level</span><b>' + (u.bestLevel || 1) + '</b></div><div class="stat-card"><span>Coins</span><b class="accent">' + (u.coins || 0).toLocaleString() + '</b></div></div>' +
       '<div class="modes">' +
       '<a class="mode" href="#/play/classic"><span class="pill" style="background:#1ec8e8;color:#0b1020">Ranked</span><b>Classic</b><span>Guideline rules. Endless, speeds up every 10 lines.</span></a>' +
       '<a class="mode" href="#/adventure"><span class="pill" style="background:#f28c1e;color:#0b1020">Stage ' + adv.unlocked + '</span><b>Adventure</b><span>' + A.COUNT + ' stages. Equipment allowed.</span></a>' +
@@ -366,7 +366,8 @@
     var f = p[0] || 'all', u = B.user();
     var chips = ['all', 'classic', 'adventure', 'battle'].map(function (k) { return '<a class="chip' + (k === f ? ' on' : '') + '" href="#/history/' + k + '">' + k.charAt(0).toUpperCase() + k.slice(1) + '</a>'; }).join('');
     return header('#/lobby', 'Lobby') + '<h1>History</h1>' +
-      '<div class="stat-row"><div class="stat-card"><span>Runs</span><b id="run-count">' + (u.gamesPlayed || 0) + '</b></div><div class="stat-card"><span>Best</span><b class="accent">' + (u.bestScore || 0).toLocaleString() + '</b></div><div class="stat-card"><span>Battles</span><b>' + u.battles.w + ' W · ' + u.battles.l + ' L</b></div></div>' +
+      '<div class="stat-row"><div class="stat-card"><span>Ranked best</span><b class="accent">' + (u.bestScore || 0).toLocaleString() + '</b></div><div class="stat-card"><span>Top score</span><b id="top-score">' + (u.bestScore || 0).toLocaleString() + '</b></div><div class="stat-card"><span>Runs</span><b id="run-count">' + (u.gamesPlayed || 0) + '</b></div></div>' +
+      '<p class="muted small">Ranked best counts clean Classic runs only. A run that used equipment or a Continue shows an Assisted or Continued badge and counts for Top score, coins and history.</p>' +
       '<div class="chips">' + chips + '</div><div id="runs"><p class="muted">Loading</p></div>' +
       '<button type="button" class="btn btn-secondary" id="csv" hidden>Export as CSV</button>';
   };
@@ -380,10 +381,12 @@
       box.innerHTML = list.length ? list.map(function (r) {
         var c = pill[r.mode] || pill.local, main = r.mode === 'battle' ? (r.result === 'win' ? 'Win' : 'Loss') : r.mode === 'adventure' ? 'Stage ' + r.stage : (r.score || 0).toLocaleString();
         var detail = r.mode === 'battle' ? 'vs ' + esc(r.opponent) + ' · ' + (r.ratingDelta > 0 ? '+' : '') + (r.ratingDelta || 0) + ' rating · ' + (r.attackSent || 0) + ' lines sent' : r.lines + ' lines · Lv ' + r.level + ' · ' + fmtTime(r.time) + (r.pps ? ' · ' + r.pps + ' pps' : '') + (r.coins ? ' · +' + r.coins + ' coins' : '');
-        var badge = r.mode === 'battle' ? 'Ranked' : r.continued ? 'Continued' : r.mode === 'adventure' ? (r.result === 'won' ? 'Cleared' : 'Failed') : (r.score === u.bestScore && r.score > 0 ? 'Best' : '');
+        var badge = r.mode === 'battle' ? 'Ranked' : r.continued ? 'Continued' : r.usedEquipment ? 'Assisted' : r.mode === 'adventure' ? (r.result === 'won' ? 'Cleared' : 'Failed') : (r.score === u.bestScore && r.score > 0 ? 'Best' : '');
         return '<div class="run"><span class="pill" style="background:' + c[0] + ';color:' + c[1] + '">' + esc(r.mode) + '</span><div class="run-main"><b>' + main + '</b><span class="muted small">' + detail + '</span></div><div class="run-side">' + (badge ? '<span class="badge">' + badge + '</span>' : '') + '<span class="muted small">' + fmtDate(r.at) + '</span></div></div>';
       }).join('') : '<p class="muted">No runs yet. Play a game and it will show up here.</p>';
       $('#run-count').textContent = allRuns.length;
+      var top = allRuns.reduce(function (m, r) { return r.mode === 'classic' && r.score > m ? r.score : m; }, u.bestScore || 0);
+      $('#top-score').textContent = top.toLocaleString();
       $('#csv').hidden = !allRuns.length;
     });
     var b = $('#csv'); if (!b) return;
