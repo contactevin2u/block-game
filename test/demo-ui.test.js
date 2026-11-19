@@ -17,14 +17,14 @@ window.Backend.init();
 
 var shop = screens.shop(['themes']);
 check('shop shows the demo banner', /Demo: no real money is charged/.test(shop));
-check('shop banner explains nothing real is collected', /card numbers, PINs or phone numbers/.test(shop));
+check('shop banner explains nothing real is collected', /real card numbers, real PINs or phone numbers/.test(shop));
 check('shop offers Buy buttons in demo mode', /data-buy="theme:neon"/.test(shop));
 var coins = screens.shop(['coins']);
 check('coins tab shows the banner too', /Demo: no real money is charged/.test(coins));
 
 var methods = window.CONFIG.PAYMENT_METHODS.map(function (m) { return m.name; }).join('|');
-check('checkout methods use plain names only', methods === 'E-wallet|Online banking|Card');
-check('no bank or wallet brand names in the method list', !/Touch|Boost|Grab|Shopee|FPX|DuitNow|Maybank|Apple|Visa|Master/i.test(JSON.stringify(window.CONFIG.PAYMENT_METHODS)));
+check('checkout methods: the demo Boost wallet plus plain names', methods === 'Boost|E-wallet|Online banking|Card');
+check('no other bank, wallet or card brand names in the method list', !/Touch|Grab|Shopee|FPX|DuitNow|Maybank|Apple|Visa|Master/i.test(JSON.stringify(window.CONFIG.PAYMENT_METHODS)));
 
 // Not a demo: no banner.
 window.APP_ENV = { mode: 'server', provider: 'ipay88', paymentsEnabled: true, demoMode: false };

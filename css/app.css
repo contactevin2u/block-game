@@ -239,3 +239,17 @@ kbd { display: inline-flex; align-items: center; justify-content: center; min-wi
   .mode-battle .player[data-player="1"] .side-left .stats, .mode-battle .player[data-player="1"] .side-right { display: none; }
 }
 @media (max-width: 420px) { .modes { grid-template-columns: 1fr 1fr; } .mode { min-height: 96px; padding: 12px; } .mode b { font-size: 16px; } }
+
+/* Demo wallet PIN */
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.pin { align-items: center; }
+.pin-input { position: absolute; opacity: 0; width: 1px; height: 1px; pointer-events: none; }
+.pin-dots { display: flex; gap: 14px; justify-content: center; padding: 8px 0; }
+.pin-dots i { width: 16px; height: 16px; border-radius: 50%; border: 2px solid var(--line); background: transparent; }
+.pin-dots i.on { background: var(--accent-bg); border-color: var(--accent-bg); }
+.pin-msg { min-height: 20px; text-align: center; }
+.keypad { display: grid; grid-template-columns: repeat(3, 72px); gap: 10px; justify-content: center; }
+.key { height: 60px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); font-family: var(--font-display); font-weight: 700; font-size: 22px; cursor: pointer; }
+.key:active { background: var(--accent-bg); color: var(--on-accent); }
+.key-back { font-size: 20px; }
+.pin .panel-actions { width: 100%; max-width: 320px; }

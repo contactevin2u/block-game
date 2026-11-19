@@ -50,7 +50,7 @@
   function paymentsMock() { return isLocal() || !root.APP_ENV || root.APP_ENV.provider === 'mock'; }
   // Demo payments: the simulated checkout, shown with a clear banner. True in browser-only mode and when the server runs with DEMO_MODE=true.
   function demoMode() { return isLocal() || !!(root.APP_ENV && root.APP_ENV.demoMode); }
-  function demoBanner() { return demoMode() ? '<div class="notice demo" role="note"><b>Demo: no real money is charged</b><p>Purchases here are pretend. Nothing is sent to any bank or wallet, and you are never asked for card numbers, PINs or phone numbers.</p></div>' : ''; }
+  function demoBanner() { return demoMode() ? '<div class="notice demo" role="note"><b>Demo: no real money is charged</b><p>Purchases here are pretend. Nothing is sent to any bank or wallet, and you are never asked for real card numbers, real PINs or phone numbers.</p></div>' : ''; }
   // PAYMENTS_ENABLED on the server. Browser-only mode is always "open" because its checkout is simulated.
   function paymentsOpen() { return isLocal() || !!(root.APP_ENV && root.APP_ENV.paymentsEnabled); }
   function buyButton(label, attr) { return paymentsOpen() ? '<button type="button" class="btn btn-primary" ' + attr + '>' + label + '</button>' : '<button type="button" class="btn btn-secondary" disabled>Purchases open soon</button>'; }
@@ -267,6 +267,41 @@
         box.innerHTML = gw + '<h1>Pay ' + money(o.item.price) + '</h1>' + summary + '<p class="eyebrow">Choose how to pay</p>' +
           methods.map(function (m) { return '<button type="button" class="card method" data-method="' + m.id + '"><b>' + esc(m.name) + '</b><span class="muted small">' + esc(m.how) + '</span></button>'; }).join('') +
           '<button type="button" class="link-btn" data-cancel>Cancel and go back</button>';
+      } else if (o.method === 'boost') {
+        // Pretend wallet: summary, PIN, processing, success. The PIN is checked in the browser and never sent.
+        var D = root.DemoPin, pin = D.create();
+        var cancelAll = function () { S.cancel(id).then(function () { toast('Payment cancelled. Nothing was charged.'); go('#/shop'); }); };
+        function showSummary() {
+          box.innerHTML = D.summaryHtml(o, money, gw);
+          $('[data-pin-continue]').addEventListener('click', showPin);
+          $$('[data-cancel]').forEach(function (b) { b.addEventListener('click', cancelAll); });
+        }
+        function showPin(message) {
+          pin.clear();
+          box.innerHTML = D.pinHtml(o, money, gw, typeof message === 'string' ? message : '');
+          var input = $('#demo-pin'), submit = $('[data-pin-submit]');
+          function refresh() { var n = pin.count(); $$('.pin-dots i').forEach(function (d, i) { d.classList.toggle('on', i < n); }); submit.disabled = !pin.complete(); }
+          $$('[data-key]').forEach(function (k) { k.addEventListener('click', function () { var v = k.getAttribute('data-key'); if (v === 'back') pin.backspace(); else pin.press(v); refresh(); }); });
+          input.addEventListener('input', function () { pin.clear(); String(input.value).replace(/[^0-9]/g, '').slice(0, 6).split('').forEach(function (d) { pin.press(d); }); refresh(); });
+          input.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); if (pin.complete()) submitPin(); } });
+          function submitPin() {
+            var result = pin.check(); input.value = '';
+            if (result !== 'ok') { showPin('Wrong PIN, try again'); return; }
+            box.innerHTML = D.processingHtml(gw);
+            setTimeout(function () {
+              S.approve(id).then(function () {
+                box.innerHTML = D.successHtml(gw, o, money);
+                setTimeout(function () { go('#/pay/return/' + id); }, 1400);
+              });
+            }, 2000);
+          }
+          submit.addEventListener('click', submitPin);
+          $('form.pin').addEventListener('submit', function (e) { e.preventDefault(); });
+          $$('[data-cancel]').forEach(function (b) { b.addEventListener('click', cancelAll); });
+          input.focus();
+        }
+        showSummary();
+        return;
       } else {
         var m = C.PAYMENT_METHODS.filter(function (x) { return x.id === o.method; })[0] || C.PAYMENT_METHODS[0];
         var instr = 'This is a demo payment. Nothing is sent to any bank, wallet or card company. Press Approve to simulate a successful payment, or Cancel to simulate a failed one.';

@@ -42,6 +42,7 @@ window.CONFIG = {
   ],
   // Demo checkout methods. Plain names on purpose: no bank or wallet brands, and nothing asks for real card details.
   PAYMENT_METHODS: [
+    { id: 'boost', name: 'Boost', how: 'Demo wallet with a pretend PIN step' },
     { id: 'ewallet', name: 'E-wallet', how: 'Demo: approve or cancel on the next screen' },
     { id: 'bank', name: 'Online banking', how: 'Demo: approve or cancel on the next screen' },
     { id: 'card', name: 'Card', how: 'Demo: approve or cancel on the next screen' }
