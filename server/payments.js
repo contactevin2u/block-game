@@ -2,7 +2,22 @@
    Both expose: createCheckout(order, ctx) -> { checkoutUrl, providerRef } and verify(order) -> 'paid' | 'pending' | 'failed'. */
 'use strict';
 
-const PROVIDER = (process.env.PAYMENT_PROVIDER || 'mock').toLowerCase();
+// Production is any Render service (RENDER=true) or NODE_ENV=production. There, mock may never run and a real
+// provider refuses to start without its keys. Unset in production means 'none': the server runs, purchases are closed.
+const PRODUCTION = process.env.NODE_ENV === 'production' || process.env.RENDER === 'true';
+const PROVIDER = (process.env.PAYMENT_PROVIDER || (PRODUCTION ? 'none' : 'mock')).toLowerCase();
+const PAYMENTS_ENABLED = /^(1|true|yes|on)$/i.test(process.env.PAYMENTS_ENABLED || '');
+function fatal(msg) { console.error('[payments] ' + msg); process.exit(1); }
+if (PRODUCTION && PROVIDER === 'mock') fatal('PAYMENT_PROVIDER=mock is not allowed in production. Set it to none, ipay88 or chip.');
+if (PROVIDER === 'chip' && !(process.env.CHIP_BRAND_ID && process.env.CHIP_SECRET_KEY)) fatal('PAYMENT_PROVIDER=chip needs CHIP_BRAND_ID and CHIP_SECRET_KEY.');
+if (PROVIDER === 'ipay88' && !(process.env.IPAY88_MERCHANT_CODE && process.env.IPAY88_MERCHANT_KEY)) fatal('PAYMENT_PROVIDER=ipay88 needs IPAY88_MERCHANT_CODE and IPAY88_MERCHANT_KEY.');
+if (!['mock', 'none', 'chip', 'ipay88'].includes(PROVIDER)) fatal('Unknown PAYMENT_PROVIDER "' + PROVIDER + '".');
+
+const none = {
+  name: 'none',
+  async createCheckout() { throw new Error('Purchases are not open yet.'); },
+  async verify() { return 'pending'; }
+};
 
 const mock = {
   name: 'mock',
@@ -89,5 +104,8 @@ const ipay88 = {
   }
 };
 
-const provider = PROVIDER === 'chip' ? chip : PROVIDER === 'ipay88' ? ipay88 : mock;
-module.exports = { provider, PROVIDER, ipay88 };
+// Exact cents from an iPay88 amount string such as "12.99". Returns null for anything else: no rounding, no guessing.
+function amountToCents(s) { const m = String(s == null ? '' : s).trim().match(/^(\d+)\.(\d{2})$/); return m ? parseInt(m[1], 10) * 100 + parseInt(m[2], 10) : null; }
+
+const provider = PROVIDER === 'chip' ? chip : PROVIDER === 'ipay88' ? ipay88 : PROVIDER === 'none' ? none : mock;
+module.exports = { provider, PROVIDER, PRODUCTION, PAYMENTS_ENABLED, ipay88, amountToCents };

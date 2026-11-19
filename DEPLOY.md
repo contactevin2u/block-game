@@ -81,6 +81,19 @@ Free plan: 300 emails a day, which covers thousands of players. Later, verifying
 
 Without a domain, Resend can only send to your own email address, which is fine for testing.
 
+## Go-live checklist for real money
+
+Do these in order. Each one protects players' purchases.
+
+1. **Render plan.** Upgrade `block-game-api` to the Starter plan. The Free plan sleeps after 15 minutes, which stops the pending-order re-check job and can make iPay88's server callback fail while the service is waking up.
+2. **Persistent disk.** Add a disk to the service (Disks tab) mounted at `/data`, 1 GB, and set `DB_PATH=/data/game.db`. Without it every deploy wipes all accounts, purchases and orders.
+3. **Daily backup.** In Render open the service's Shell tab and run a scheduled copy, or download `/data/game.db` daily. The simplest reliable option is a Render Cron Job that runs `cp /data/game.db /data/backup-$(date +%u).db` every day, which keeps the last seven days on the disk; download one copy a week to your own computer.
+4. **Payment provider.** `PAYMENT_PROVIDER=ipay88` with `IPAY88_MERCHANT_CODE` and `IPAY88_MERCHANT_KEY`. Mock is refused on Render, and `chip` refuses to start without its keys.
+5. **Sandbox first.** Point `IPAY88_ENTRY_URL` and `IPAY88_REQUERY_URL` at iPay88's sandbox, set `PAYMENTS_ENABLED=true`, and make one full test purchase. Then remove the two sandbox URLs for live.
+6. **Email live.** `EMAIL_PROVIDER` is gmail, brevo or resend, so receipts reach players.
+7. **Switch on.** `PAYMENTS_ENABLED=true` on live keys. Buy the cheapest item yourself with a real payment and check the receipt email and the item on the account.
+8. **Matching payments to money.** Every order stores the iPay88 transaction id, amount in cents, currency, status and time, so each line in iPay88's settlement report can be matched to an order in the database.
+
 ## 6a. Real payments with an existing iPay88 (ADAPTIS) account
 
 1. Ask iPay88 support to register the game's address on the merchant account (they accept payments only from the website on file). Give them the exact address players use, for example `https://block-game-smoky.vercel.app`, or your custom domain. If the account's current website still needs iPay88, ask for a second merchant account for the game instead.

@@ -47,7 +47,10 @@
   function validEmail(v) { return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v); }
   function passToggle() { $$('[data-toggle-pass]').forEach(function (b) { b.addEventListener('click', function () { var inp = $('#' + b.getAttribute('data-toggle-pass')); inp.type = inp.type === 'password' ? 'text' : 'password'; b.textContent = inp.type === 'password' ? 'Show' : 'Hide'; }); }); }
   function inboxLink() { return testTools() ? '<p class="muted small center">Email is in test mode: messages appear in the <a href="#/inbox">Test inbox</a>.</p>' : ''; }
-  function paymentsMock() { return isLocal() || !root.APP_ENV || root.APP_ENV.provider !== 'chip'; }
+  function paymentsMock() { return isLocal() || !root.APP_ENV || root.APP_ENV.provider === 'mock'; }
+  // PAYMENTS_ENABLED on the server. Browser-only mode is always "open" because its checkout is simulated.
+  function paymentsOpen() { return isLocal() || !!(root.APP_ENV && root.APP_ENV.paymentsEnabled); }
+  function buyButton(label, attr) { return paymentsOpen() ? '<button type="button" class="btn btn-primary" ' + attr + '>' + label + '</button>' : '<button type="button" class="btn btn-secondary" disabled>Purchases open soon</button>'; }
 
   // ---- screens ------------------------------------------------------------------
   var screens = {};
@@ -216,17 +219,17 @@
       body = '<div class="theme-grid">' + T.list.map(function (th) {
         var owned = S.themeOwned(u, th.id), active = (u.settings.theme || 'classic') === th.id, price = C.PRICES.themes[th.id];
         return '<div class="card theme-card"><canvas class="sample" data-theme-id="' + th.id + '"></canvas><div class="theme-body"><div class="row"><b>' + esc(th.name) + '</b><span class="pill ' + (th.tier === 'free' ? 'free' : owned ? 'owned' : 'paid') + '">' + (th.tier === 'free' ? 'Free' : owned ? 'Owned' : money(price)) + '</span></div><p class="muted small">' + esc(th.tagline) + '</p>' +
-          (owned ? (active ? '<button type="button" class="btn btn-secondary" disabled>In use</button>' : '<button type="button" class="btn btn-primary" data-use="' + th.id + '">Use this theme</button>') : '<button type="button" class="btn btn-primary" data-buy="theme:' + th.id + '">Buy · ' + money(price) + '</button>' + (th.id === 'lcd' ? '<p class="muted small center">Or free at level ' + C.LCD_UNLOCK_LEVEL + '</p>' : '')) + '</div></div>';
+          (owned ? (active ? '<button type="button" class="btn btn-secondary" disabled>In use</button>' : '<button type="button" class="btn btn-primary" data-use="' + th.id + '">Use this theme</button>') : buyButton('Buy · ' + money(price), 'data-buy="theme:' + th.id + '"') + (th.id === 'lcd' ? '<p class="muted small center">Or free at level ' + C.LCD_UNLOCK_LEVEL + '</p>' : '')) + '</div></div>';
       }).join('') + '</div>';
     } else if (tab === 'extras') {
-      body = items.filter(function (i) { return i.type === 'removeAds' || i.type === 'bundle'; }).map(function (i) { return '<div class="card"><div class="row"><b>' + esc(i.name) + '</b><span class="pill ' + (i.owned ? 'owned' : 'paid') + '">' + (i.owned ? 'Owned' : money(i.price)) + '</span></div><p class="muted">' + esc(i.desc) + '</p>' + (i.owned ? '' : '<button type="button" class="btn btn-primary" data-buy="' + i.type + ':' + i.id + '">Buy · ' + money(i.price) + '</button>') + '</div>'; }).join('');
+      body = items.filter(function (i) { return i.type === 'removeAds' || i.type === 'bundle'; }).map(function (i) { return '<div class="card"><div class="row"><b>' + esc(i.name) + '</b><span class="pill ' + (i.owned ? 'owned' : 'paid') + '">' + (i.owned ? 'Owned' : money(i.price)) + '</span></div><p class="muted">' + esc(i.desc) + '</p>' + (i.owned ? '' : buyButton('Buy · ' + money(i.price), 'data-buy="' + i.type + ':' + i.id + '"')) + '</div>'; }).join('');
     } else if (tab === 'coins') {
-      body = '<p class="muted">Coins buy equipment for Adventure. You also earn 1 coin per line cleared and stage rewards.</p>' + items.filter(function (i) { return i.type === 'coins'; }).map(function (i) { return '<div class="card row"><div><b>' + esc(i.name) + '</b><p class="muted small">' + esc(i.desc) + '</p></div><button type="button" class="btn btn-primary slim" data-buy="coins:' + i.id + '">' + money(i.price) + '</button></div>'; }).join('');
+      body = '<p class="muted">Coins buy equipment for Adventure. You also earn 1 coin per line cleared and stage rewards.</p>' + items.filter(function (i) { return i.type === 'coins'; }).map(function (i) { return '<div class="card row"><div><b>' + esc(i.name) + '</b><p class="muted small">' + esc(i.desc) + '</p></div>' + (paymentsOpen() ? '<button type="button" class="btn btn-primary slim" data-buy="coins:' + i.id + '">' + money(i.price) + '</button>' : '<button type="button" class="btn btn-secondary slim" disabled>Soon</button>') + '</div>'; }).join('');
     } else {
       body = '<p class="muted">You have <b class="accent">' + u.coins.toLocaleString() + '</b> coins. Use equipment during Classic or Adventure: press 1 to 5 on a keyboard, or tap the bar under the board. In Classic, using one makes that run unranked.</p>' + C.EQUIPMENT.map(function (e) { return '<div class="card row"><div><b>' + esc(e.name) + '</b> <span class="muted small">× ' + (u.inventory[e.id] || 0) + '</span><p class="muted small">' + esc(e.desc) + '</p></div><button type="button" class="btn btn-secondary slim" data-equip-buy="' + e.id + '">' + e.cost + ' coins</button></div>'; }).join('');
     }
     return header('#/lobby', 'Lobby', '<span class="muted small">Coins <b class="accent">' + u.coins.toLocaleString() + '</b></span>') + '<h1>Shop</h1><div class="chips">' + tabs + '</div>' + body +
-      (paymentsMock() ? '<p class="muted small center">Payments are in test mode: the checkout is simulated and no money moves.</p>' : '');
+      (!paymentsOpen() ? '<p class="muted small center">Purchases open soon. Coins you earn by playing already work for equipment.</p>' : paymentsMock() ? '<p class="muted small center">Payments are in test mode: the checkout is simulated and no money moves.</p>' : '');
   };
   screens.shop.bind = function (p) {
     $$('.sample').forEach(function (cv) { R.drawSample(cv, T.byId(cv.getAttribute('data-theme-id')), 120); });

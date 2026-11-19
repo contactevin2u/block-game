@@ -43,7 +43,9 @@ services:
       - key: EMAIL_FROM
         sync: false
       - key: PAYMENT_PROVIDER
-        value: mock
+        value: none
+      - key: PAYMENTS_ENABLED
+        value: "false"
       - key: IPAY88_MERCHANT_CODE
         sync: false
       - key: IPAY88_MERCHANT_KEY

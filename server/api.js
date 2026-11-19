@@ -4,7 +4,7 @@ const express = require('express');
 const { row, all, run, db } = require('./db');
 const auth = require('./auth');
 const email = require('./email');
-const { provider: pay, PROVIDER: PAY_PROVIDER, ipay88 } = require('./payments');
+const { provider: pay, PROVIDER: PAY_PROVIDER, PAYMENTS_ENABLED, ipay88, amountToCents } = require('./payments');
 
 global.window = global.window || {};
 require('../js/config.js');
@@ -36,14 +36,15 @@ function toClient(u) {
     adventure: j(u.adventure, { unlocked: 1, stages: {} })
   };
 }
-function meResponse(req) { return { user: req.user ? toClient(req.user) : null, sessions: req.user ? auth.sessionCount(req.user.id) : 0, expiredEmail: req.expiredEmail || null, provider: PAY_PROVIDER, emailProvider: email.PROVIDER }; }
+function meResponse(req) { return { user: req.user ? toClient(req.user) : null, sessions: req.user ? auth.sessionCount(req.user.id) : 0, expiredEmail: req.expiredEmail || null, provider: PAY_PROVIDER, paymentsEnabled: PAYMENTS_ENABLED && PAY_PROVIDER !== 'none', emailProvider: email.PROVIDER }; }
 function fresh(req) { req.user = row('SELECT * FROM users WHERE id = ?', req.user.id); return toClient(req.user); }
 
 async function mail(to, subject, body, link, linkText) { try { await email.send({ to, subject, body, link, linkText }); } catch (e) { console.error('[email] failed:', e.message); } }
 function notFoundOrOk(res) { return res.json({ ok: true }); }
 
 // ---- health / me --------------------------------------------------------------
-r.get('/health', (req, res) => res.json({ ok: true, provider: PAY_PROVIDER, email: email.PROVIDER }));
+r.get('/health', (req, res) => res.json({ ok: true, provider: PAY_PROVIDER, paymentsEnabled: PAYMENTS_ENABLED, email: email.PROVIDER }));
+function paymentsOpen(req, res, next) { if (!PAYMENTS_ENABLED || PAY_PROVIDER === 'none') return bad(res, 'Purchases are not open yet.', 403); next(); }
 r.get('/me', (req, res) => res.json(meResponse(req)));
 
 r.patch('/me', needUser, (req, res) => {
@@ -187,7 +188,7 @@ function catalogueItem(type, id) {
   if (type === 'coins') { const p = P.coins.find((c) => c.id === id); if (p) return { type, id, name: p.coins.toLocaleString() + ' coins', price: p.price, coins: p.coins }; }
   return null;
 }
-function orderToClient(o) { return { id: o.id, status: o.status, method: o.method, provider: o.provider, createdAt: o.created_at, paidAt: o.paid_at, item: { type: o.type, id: o.item_id, name: o.name, price: o.price_cents / 100, coins: o.coins } }; }
+function orderToClient(o) { return { id: o.id, status: o.status, method: o.method, provider: o.provider, createdAt: o.created_at, paidAt: o.paid_at, transactionId: o.provider_ref, item: { type: o.type, id: o.item_id, name: o.name, price: o.price_cents / 100, coins: o.coins } }; }
 
 // Idempotent grant: a second webhook or a poll after payment changes nothing.
 function grant(orderId) {
@@ -208,7 +209,8 @@ function grant(orderId) {
   return row('SELECT * FROM orders WHERE id = ?', orderId);
 }
 
-r.post('/orders', needUser, auth.rateLimit('orders', 20, 15 * 60000), async (req, res) => {
+// The game sends only type and id. The price comes from the server's own catalogue; any price in the request is ignored.
+r.post('/orders', needUser, paymentsOpen, auth.rateLimit('orders', 20, 15 * 60000), async (req, res) => {
   const item = catalogueItem(req.body.type, req.body.id);
   if (!item) return bad(res, 'Unknown item.');
   const u = req.user, owned = j(u.themes, []);
@@ -219,7 +221,7 @@ r.post('/orders', needUser, auth.rateLimit('orders', 20, 15 * 60000), async (req
   try {
     const ck = await pay.createCheckout(o, { baseUrl: baseUrl(req), apiUrl: apiUrl(req), email: u.email });
     o.provider_ref = ck.providerRef;
-    run('INSERT INTO orders (id, user_id, type, item_id, name, price_cents, coins, status, provider, provider_ref, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)', o.id, o.user_id, o.type, o.item_id, o.name, o.price_cents, o.coins, o.status, o.provider, o.provider_ref, o.created_at);
+    run('INSERT INTO orders (id, user_id, type, item_id, name, price_cents, coins, status, provider, provider_ref, created_at, currency) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)', o.id, o.user_id, o.type, o.item_id, o.name, o.price_cents, o.coins, o.status, o.provider, o.provider_ref, o.created_at, 'MYR');
     res.json({ order: orderToClient(o), checkoutUrl: ck.checkoutUrl });
   } catch (e) { console.error('[orders]', e.message); bad(res, 'Could not start the payment. Try again in a moment.', 502); }
 });
@@ -227,15 +229,37 @@ r.post('/orders', needUser, auth.rateLimit('orders', 20, 15 * 60000), async (req
 r.get('/orders/:id', needUser, async (req, res) => {
   let o = row('SELECT * FROM orders WHERE id = ? AND user_id = ?', req.params.id, req.user.id);
   if (!o) return bad(res, 'Order not found.', 404);
-  if (o.status === 'pending' && o.created_at < Date.now() - 30 * 60000) { run('UPDATE orders SET status = ? WHERE id = ?', 'expired', o.id); o.status = 'expired'; }
-  if (o.provider !== 'mock' && (o.status === 'pending' || o.status === 'processing')) {
-    try { const v = await pay.verify(o); if (v === 'paid') o = grant(o.id); else if (v === 'failed') { run('UPDATE orders SET status = ? WHERE id = ?', 'failed', o.id); o.status = 'failed'; } } catch (e) { console.error('[verify]', e.message); }
-  }
+  if (o.provider !== 'mock' && o.provider !== 'none' && (o.status === 'pending' || o.status === 'processing')) o = await settle(o);
   res.json({ order: orderToClient(o), user: fresh(req) });
 });
 
+// Ask the gateway for the truth about one order and record the answer.
+async function settle(o) {
+  try {
+    const v = await pay.verify(o);
+    run('UPDATE orders SET last_checked_at = ? WHERE id = ?', Date.now(), o.id);
+    if (v === 'paid') return grant(o.id);
+    if (v === 'failed') run('UPDATE orders SET status = ? WHERE id = ?', 'failed', o.id);
+  } catch (e) { console.error('[verify]', o.id, e.message); }
+  return row('SELECT * FROM orders WHERE id = ?', o.id);
+}
+
+// Background job: any order still PENDING after PENDING_AGE_MS is re-checked with the gateway's status API,
+// so a lost callback never leaves a paid player without the item. Orders older than PENDING_EXPIRE_MS expire.
+const PENDING_AGE_MS = parseInt(process.env.PENDING_AGE_MS || String(15 * 60000), 10);
+const RECHECK_INTERVAL_MS = parseInt(process.env.RECHECK_INTERVAL_MS || String(5 * 60000), 10);
+const PENDING_EXPIRE_MS = parseInt(process.env.PENDING_EXPIRE_MS || String(2 * 3600000), 10);
+async function recheckPending() {
+  if (pay.name === 'mock' || pay.name === 'none') return;
+  const now = Date.now();
+  const list = all("SELECT * FROM orders WHERE status IN ('pending','processing') AND created_at < ? AND created_at > ?", now - PENDING_AGE_MS, now - PENDING_EXPIRE_MS);
+  for (const o of list) await settle(o);
+  run("UPDATE orders SET status = 'expired' WHERE status IN ('pending','processing') AND created_at <= ?", now - PENDING_EXPIRE_MS);
+}
+setInterval(() => { recheckPending().catch((e) => console.error('[recheck]', e.message)); }, RECHECK_INTERVAL_MS).unref();
+
 // Mock gateway steps (PAYMENT_PROVIDER=mock only).
-r.post('/orders/:id/mock', needUser, (req, res) => {
+r.post('/orders/:id/mock', needUser, paymentsOpen, (req, res) => {
   if (pay.name !== 'mock') return bad(res, 'Not available.', 404);
   const o = row('SELECT * FROM orders WHERE id = ? AND user_id = ?', req.params.id, req.user.id);
   if (!o) return bad(res, 'Order not found.', 404);
@@ -264,27 +288,38 @@ r.get('/payments/ipay88/start/:id', (req, res) => {
   if (!o || o.status !== 'pending') return res.redirect(baseUrl(req) + '/#/pay/return/' + req.params.id);
   res.type('html').send(ipay88.startForm(o, { baseUrl: baseUrl(req), apiUrl: apiUrl(req), email: req.user.email }));
 });
+// Handles one iPay88 result (browser return or backend callback). Never grants on the callback alone:
+// signature, order, exact amount and currency must all match, and a re-query to iPay88 must say paid.
+function reject(o, why) { console.warn('[ipay88] rejected', o.id, why); run('UPDATE orders SET last_error = ?, last_checked_at = ? WHERE id = ?', why.slice(0, 200), Date.now(), o.id); return { order: row('SELECT * FROM orders WHERE id = ?', o.id), ok: false }; }
 async function ipay88Result(f) {
-  const o = f && f.RefNo ? row('SELECT * FROM orders WHERE id = ?', String(f.RefNo)) : null;
-  if (!o) return null;
-  if (!ipay88.validResponse(f)) { console.warn('[ipay88] bad signature for', o.id); return o; }
-  if (f.TransId && !o.provider_ref) run('UPDATE orders SET provider_ref = ?, method = ? WHERE id = ?', String(f.TransId).slice(0, 64), String(f.PaymentId || '').slice(0, 20), o.id);
+  if (!f || !f.RefNo) return { order: null, ok: false, unknown: true };
+  const o = row('SELECT * FROM orders WHERE id = ?', String(f.RefNo));
+  if (!o || o.provider !== 'ipay88') return { order: null, ok: false, unknown: true };
+  if (!ipay88.validResponse(f)) return reject(o, 'bad signature');
+  const cents = amountToCents(f.Amount);
+  if (cents === null || cents !== o.price_cents) return reject(o, 'amount mismatch: got ' + f.Amount + ', expected ' + (o.price_cents / 100).toFixed(2));
+  if (String(f.Currency || '') !== 'MYR') return reject(o, 'currency mismatch: ' + f.Currency);
+  if (o.status === 'paid') return { order: o, ok: true }; // duplicate callback: nothing to do
+  run('UPDATE orders SET provider_ref = COALESCE(provider_ref, ?), method = COALESCE(method, ?), paid_amount_cents = ?, currency = ?, last_checked_at = ? WHERE id = ?',
+    f.TransId ? String(f.TransId).slice(0, 64) : null, f.PaymentId ? String(f.PaymentId).slice(0, 20) : null, cents, 'MYR', Date.now(), o.id);
   if (String(f.Status) === '1') {
-    // Signature ok and iPay88 says paid; confirm with a re-query before granting.
-    try { if ((await ipay88.verify(o)) === 'paid') return grant(o.id); } catch (e) { console.error('[ipay88 requery]', e.message); }
-    return row('SELECT * FROM orders WHERE id = ?', o.id);
+    try { if ((await ipay88.verify(o)) === 'paid') return { order: grant(o.id), ok: true }; } catch (e) { console.error('[ipay88 requery]', e.message); }
+    return reject(o, 'iPay88 status query did not confirm payment');
   }
-  if (o.status === 'pending') run('UPDATE orders SET status = ? WHERE id = ?', 'failed', o.id);
-  return row('SELECT * FROM orders WHERE id = ?', o.id);
+  if (o.status === 'pending' || o.status === 'processing') run('UPDATE orders SET status = ?, last_error = ? WHERE id = ?', 'failed', 'iPay88 status ' + String(f.Status) + (f.ErrDesc ? ': ' + String(f.ErrDesc).slice(0, 120) : ''), o.id);
+  return { order: row('SELECT * FROM orders WHERE id = ?', o.id), ok: false };
 }
 // Browser return (ResponseURL): verify, then send the player to the game's result page.
 r.post('/payments/ipay88/response', express.urlencoded({ extended: false }), async (req, res) => {
-  const o = await ipay88Result(req.body);
-  res.redirect(baseUrl(req) + '/#/pay/return/' + (o ? o.id : (req.body && req.body.RefNo) || ''));
+  const r2 = await ipay88Result(req.body);
+  res.redirect(baseUrl(req) + '/#/pay/return/' + (r2.order ? r2.order.id : String((req.body && req.body.RefNo) || '').slice(0, 20)));
 });
-// Server-to-server (BackendURL): iPay88 expects the text RECEIVEOK.
+// Server-to-server (BackendURL). iPay88's OPSG guide expects the plain text RECEIVEOK; anything else makes it retry.
 r.post('/payments/ipay88/backend', express.urlencoded({ extended: false }), async (req, res) => {
-  try { await ipay88Result(req.body); } catch (e) { console.error('[ipay88 backend]', e.message); }
+  try {
+    const r2 = await ipay88Result(req.body);
+    if (r2.unknown) return res.status(404).type('text').send('UNKNOWN ORDER');
+  } catch (e) { console.error('[ipay88 backend]', e.message); }
   res.type('text').send('RECEIVEOK');
 });
 
