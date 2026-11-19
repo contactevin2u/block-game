@@ -55,7 +55,16 @@ The free tier sleeps after 15 minutes without visitors and takes about 30 second
 
 For Layout A with a domain, just add `play.yourgame.com` on Render and set `BASE_URL` and `API_URL` to it.
 
-## 5. Real email with Resend
+## 5a. Real email with Brevo (no domain needed)
+
+1. Create a free account at brevo.com. Go to Senders, add your own email address as a sender, and click the verification link Brevo emails you.
+2. Go to SMTP and API, then API Keys, create a key, copy it.
+3. On Render set `EMAIL_PROVIDER=brevo`, `BREVO_API_KEY=xkeysib-...`, `EMAIL_FROM=Block Game <you@example.com>` using the exact address you verified.
+4. Test: Forgot password. The email arrives in the player's real inbox.
+
+Free plan: 300 emails a day, which covers thousands of players. Later, verifying a domain in Brevo improves deliverability.
+
+## 5b. Real email with Resend (needs a domain)
 
 1. Create a Resend account, add your domain, add the three DNS records it shows (SPF, DKIM, DMARC) at your registrar, wait for the green tick.
 2. Create an API key.

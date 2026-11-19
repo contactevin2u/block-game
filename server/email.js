@@ -1,4 +1,5 @@
-/* Email sending. EMAIL_PROVIDER=resend sends real mail; =console logs it and keeps a dev inbox. */
+/* Email sending. EMAIL_PROVIDER=brevo or =resend sends real mail; =console logs it and keeps a dev inbox.
+   Brevo works with a verified sender address and no domain. Resend needs a verified domain. */
 'use strict';
 
 const PROVIDER = (process.env.EMAIL_PROVIDER || 'console').toLowerCase();
@@ -23,6 +24,18 @@ ${link ? `<p style="margin:0 0 20px"><a href="${escapeHtml(link)}" style="displa
 
 async function send({ to, subject, body, link, linkText }) {
   const { text, html } = render(subject, body, link, linkText);
+  if (PROVIDER === 'brevo') {
+    const key = process.env.BREVO_API_KEY;
+    if (!key) throw new Error('BREVO_API_KEY is not set');
+    const m = FROM.match(/^(.*?)\s*<([^>]+)>$/);
+    const sender = m ? { name: m[1].trim() || GAME, email: m[2].trim() } : { name: GAME, email: FROM.trim() };
+    const r = await fetch('https://api.brevo.com/v3/smtp/email', {
+      method: 'POST', headers: { 'api-key': key, 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({ sender, to: [{ email: to }], subject, textContent: text, htmlContent: html })
+    });
+    if (!r.ok) throw new Error('Brevo error ' + r.status + ': ' + (await r.text()).slice(0, 300));
+    return true;
+  }
   if (PROVIDER === 'resend') {
     const key = process.env.RESEND_API_KEY;
     if (!key) throw new Error('RESEND_API_KEY is not set');
