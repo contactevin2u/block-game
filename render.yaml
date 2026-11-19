@@ -1,0 +1,44 @@
+# Render Blueprint. In Render: New, Blueprint, pick this repository. Fill the blank values when asked.
+services:
+  - type: web
+    name: block-game-api
+    runtime: node
+    plan: starter
+    buildCommand: npm install --omit=dev
+    startCommand: npm start
+    healthCheckPath: /api/health
+    autoDeploy: true
+    disk:
+      name: data
+      mountPath: /data
+      sizeGB: 1
+    envVars:
+      - key: NODE_VERSION
+        value: "24"
+      - key: DB_PATH
+        value: /data/game.db
+      - key: SESSION_DAYS
+        value: "30"
+      - key: GAME_NAME
+        value: Block Game
+      # Where players open the game. Your Vercel address, or this service's own address.
+      - key: BASE_URL
+        sync: false
+      # This service's own address, used for payment callbacks. e.g. https://block-game-api.onrender.com
+      - key: API_URL
+        sync: false
+      # Front-end origins allowed to log in across sites (your Vercel address). Leave empty if Render serves the game itself.
+      - key: CORS_ORIGIN
+        sync: false
+      - key: EMAIL_PROVIDER
+        value: console
+      - key: RESEND_API_KEY
+        sync: false
+      - key: EMAIL_FROM
+        sync: false
+      - key: PAYMENT_PROVIDER
+        value: mock
+      - key: CHIP_BRAND_ID
+        sync: false
+      - key: CHIP_SECRET_KEY
+        sync: false

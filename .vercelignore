@@ -1,0 +1,13 @@
+server
+test
+shots
+data
+node_modules
+artifact.html
+render.yaml
+DEPLOY.md
+README.md
+.env
+.env.example
+package.json
+package-lock.json
