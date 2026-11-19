@@ -399,18 +399,12 @@
       '<div class="field"><label for="code">Join a friend\'s room</label><div class="row gap"><input class="input code" id="code" maxlength="6" placeholder="Room code" autocomplete="off"><button type="button" class="btn btn-secondary slim" id="join">Join</button></div><p class="err" data-err="code"></p></div>' +
       (canLocal() ? '<a class="btn btn-secondary stack" href="#/battle/local">Local 2-player<small>Two players on this keyboard</small></a>' : '<p class="muted small center">Local 2-player needs a PC with a keyboard.</p>') +
       '</div>' +
-      '<div id="searching" hidden class="card center"><div class="dots"><i></i><i></i><i></i></div><h2>Finding an opponent</h2><p class="muted" id="search-txt">0:00 · rating ' + rating + ' ± 100</p><p class="muted small">The range widens every 10 seconds. After 60 seconds you get a bot match instead.</p><button type="button" class="btn btn-danger" id="cancel">Cancel</button></div>' +
       '<div id="online" hidden class="notice"><b>Online rooms are coming soon</b><p>Rooms with a code and link need the online match server, which is the next thing being built. For now you can play Quick match against the computer' + (canLocal() ? ' or Local 2-player on one keyboard' : '') + '.</p><button type="button" class="link-btn" id="online-ok">OK</button></div>' +
       '<p class="muted small center">Battle is cosmetics only. Equipment from Adventure never applies here.</p>';
   };
   screens.battle.bind = function () {
-    var t = null, el = 0, u = B.user();
-    $('#quick').addEventListener('click', function () {
-      $('#idle').hidden = true; $('#searching').hidden = false; el = 0;
-      var wait = 2 + Math.floor(Math.random() * 3);
-      t = setInterval(function () { el++; $('#search-txt').textContent = fmtTime(el) + ' · rating ' + (u.rating || 1000) + ' ± ' + (100 + Math.floor(el / 10) * 100); if (el >= wait) { clearInterval(t); go('#/battle/quick'); } }, 1000);
-    });
-    $('#cancel').addEventListener('click', function () { clearInterval(t); $('#idle').hidden = false; $('#searching').hidden = true; });
+    // Quick match starts the computer opponent at once. The matchmaking wait returns with the online server.
+    $('#quick').addEventListener('click', function () { go('#/battle/quick'); });
     function online() { $('#online').hidden = false; $('#online').scrollIntoView({ behavior: 'smooth' }); }
     $('#room').addEventListener('click', online);
     $('#join').addEventListener('click', function () { var v = $('#code').value.trim(); if (!/^[A-Za-z0-9]{6}$/.test(v)) return showErr('code', 'A room code is 6 letters and numbers, like 7K3PX9.'); showErr('code', ''); online(); });
