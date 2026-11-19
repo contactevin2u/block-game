@@ -48,6 +48,9 @@
   function passToggle() { $$('[data-toggle-pass]').forEach(function (b) { b.addEventListener('click', function () { var inp = $('#' + b.getAttribute('data-toggle-pass')); inp.type = inp.type === 'password' ? 'text' : 'password'; b.textContent = inp.type === 'password' ? 'Show' : 'Hide'; }); }); }
   function inboxLink() { return testTools() ? '<p class="muted small center">Email is in test mode: messages appear in the <a href="#/inbox">Test inbox</a>.</p>' : ''; }
   function paymentsMock() { return isLocal() || !root.APP_ENV || root.APP_ENV.provider === 'mock'; }
+  // Demo payments: the simulated checkout, shown with a clear banner. True in browser-only mode and when the server runs with DEMO_MODE=true.
+  function demoMode() { return isLocal() || !!(root.APP_ENV && root.APP_ENV.demoMode); }
+  function demoBanner() { return demoMode() ? '<div class="notice demo" role="note"><b>Demo: no real money is charged</b><p>Purchases here are pretend. Nothing is sent to any bank or wallet, and you are never asked for card numbers, PINs or phone numbers.</p></div>' : ''; }
   // PAYMENTS_ENABLED on the server. Browser-only mode is always "open" because its checkout is simulated.
   function paymentsOpen() { return isLocal() || !!(root.APP_ENV && root.APP_ENV.paymentsEnabled); }
   function buyButton(label, attr) { return paymentsOpen() ? '<button type="button" class="btn btn-primary" ' + attr + '>' + label + '</button>' : '<button type="button" class="btn btn-secondary" disabled>Purchases open soon</button>'; }
@@ -228,8 +231,8 @@
     } else {
       body = '<p class="muted">You have <b class="accent">' + u.coins.toLocaleString() + '</b> coins. Use equipment during Classic or Adventure: press 1 to 5 on a keyboard, or tap the bar under the board. In Classic, using one makes that run unranked.</p>' + C.EQUIPMENT.map(function (e) { return '<div class="card row"><div><b>' + esc(e.name) + '</b> <span class="muted small">× ' + (u.inventory[e.id] || 0) + '</span><p class="muted small">' + esc(e.desc) + '</p></div><button type="button" class="btn btn-secondary slim" data-equip-buy="' + e.id + '">' + e.cost + ' coins</button></div>'; }).join('');
     }
-    return header('#/lobby', 'Lobby', '<span class="muted small">Coins <b class="accent">' + u.coins.toLocaleString() + '</b></span>') + '<h1>Shop</h1><div class="chips">' + tabs + '</div>' + body +
-      (!paymentsOpen() ? '<p class="muted small center">Purchases open soon. Coins you earn by playing already work for equipment.</p>' : paymentsMock() ? '<p class="muted small center">Payments are in test mode: the checkout is simulated and no money moves.</p>' : '');
+    return header('#/lobby', 'Lobby', '<span class="muted small">Coins <b class="accent">' + u.coins.toLocaleString() + '</b></span>') + '<h1>Shop</h1>' + demoBanner() + '<div class="chips">' + tabs + '</div>' + body +
+      (!paymentsOpen() ? '<p class="muted small center">Purchases open soon. Coins you earn by playing already work for equipment.</p>' : '');
   };
   screens.shop.bind = function (p) {
     $$('.sample').forEach(function (cv) { R.drawSample(cv, T.byId(cv.getAttribute('data-theme-id')), 120); });
@@ -257,16 +260,16 @@
       if (o.status === 'expired' || o.status === 'cancelled' || o.status === 'failed') { box.innerHTML = header('#/shop', 'Shop') + '<h1>Order ' + o.status + '</h1><p class="lead">Nothing was charged.</p><a class="btn btn-primary" href="#/shop">Back to shop</a>'; return; }
       if (o.status === 'paid') { box.innerHTML = header('#/shop', 'Shop') + '<h1>Already paid</h1><a class="btn btn-primary" href="#/shop">Back to shop</a>'; return; }
       var summary = '<div class="card order"><div class="row"><span class="muted">Order</span><b>' + esc(o.id) + '</b></div><div class="row"><span>' + esc(o.item.name) + '</span><b>' + money(o.item.price) + '</b></div></div>';
-      var gw = '<div class="gateway-bar"><span class="pill">Test gateway</span><span class="muted small">This page stands in for the CHIP hosted checkout</span></div>';
+      var gw = demoBanner();
       if (step === 'method' || o.status === 'pending') {
-        var methods = C.PAYMENT_METHODS.filter(function (m) { return !m.appleOnly || isApple(); });
+        var methods = C.PAYMENT_METHODS;
         box.innerHTML = gw + '<h1>Pay ' + money(o.item.price) + '</h1>' + summary + '<p class="eyebrow">Choose how to pay</p>' +
           methods.map(function (m) { return '<button type="button" class="card method" data-method="' + m.id + '"><b>' + esc(m.name) + '</b><span class="muted small">' + esc(m.how) + '</span></button>'; }).join('') +
           '<button type="button" class="link-btn" data-cancel>Cancel and go back</button>';
       } else {
         var m = C.PAYMENT_METHODS.filter(function (x) { return x.id === o.method; })[0] || C.PAYMENT_METHODS[0];
-        var instr = { tng: 'Open the Touch \'n Go eWallet app on your phone and approve the payment request.', fpx: 'You are now on your bank\'s login page. Log in and approve the transfer.', card: 'Enter your card details, then approve the one-time password from your bank.', applepay: 'Confirm with Face ID or Touch ID.' }[m.id];
-        box.innerHTML = gw + '<h1>' + esc(m.name) + '</h1>' + summary + '<div class="card approve"><p>' + instr + '</p><p class="muted small">In the real flow this screen belongs to the bank or wallet. Approve or cancel below to simulate the result.</p>' +
+        var instr = 'This is a demo payment. Nothing is sent to any bank, wallet or card company. Press Approve to simulate a successful payment, or Cancel to simulate a failed one.';
+        box.innerHTML = gw + '<h1>' + esc(m.name) + '</h1>' + summary + '<div class="card approve"><p>' + instr + '</p>' +
           '<button type="button" class="btn btn-primary" data-approve>Approve payment</button><button type="button" class="btn btn-secondary" data-cancel>Cancel</button></div>';
       }
       $$('[data-method]').forEach(function (b) { b.addEventListener('click', function () { S.choose(id, b.getAttribute('data-method')).then(function () { go('#/checkout/' + id + '/approve'); }); }); });
@@ -448,6 +451,7 @@
   }
 
   root.UI = {
+    screens: screens,
     init: function () {
       app = document.getElementById('app');
       app.innerHTML = '<p class="muted center pad">Loading</p>';

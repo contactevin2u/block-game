@@ -81,6 +81,14 @@ Free plan: 300 emails a day, which covers thousands of players. Later, verifying
 
 Without a domain, Resend can only send to your own email address, which is fine for testing.
 
+## Demo payments (current setup)
+
+The shop runs a pretend checkout: the player picks E-wallet, Online banking or Card, presses Approve or Cancel, and the item is granted or not. A banner on the shop and checkout says "Demo: no real money is charged". No bank or wallet brands appear, and nothing asks for card numbers, PINs or phone numbers.
+
+Render settings for the demo: , , . Without  the server refuses to start with mock on Render, so a demo can never be mistaken for a live checkout.
+
+To move to real money later, follow the go-live checklist below and section 6a: the iPay88 code is in place and switches on with  plus the keys. Remove  at that point.
+
 ## Go-live checklist for real money
 
 Do these in order. Each one protects players' purchases.

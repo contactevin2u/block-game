@@ -4,7 +4,7 @@ const express = require('express');
 const { row, all, run, db } = require('./db');
 const auth = require('./auth');
 const email = require('./email');
-const { provider: pay, PROVIDER: PAY_PROVIDER, PAYMENTS_ENABLED, ipay88, amountToCents } = require('./payments');
+const { provider: pay, PROVIDER: PAY_PROVIDER, PAYMENTS_ENABLED, DEMO_MODE, ipay88, amountToCents } = require('./payments');
 
 global.window = global.window || {};
 require('../js/config.js');
@@ -36,14 +36,14 @@ function toClient(u) {
     adventure: j(u.adventure, { unlocked: 1, stages: {} })
   };
 }
-function meResponse(req) { return { user: req.user ? toClient(req.user) : null, sessions: req.user ? auth.sessionCount(req.user.id) : 0, expiredEmail: req.expiredEmail || null, provider: PAY_PROVIDER, paymentsEnabled: PAYMENTS_ENABLED && PAY_PROVIDER !== 'none', emailProvider: email.PROVIDER }; }
+function meResponse(req) { return { user: req.user ? toClient(req.user) : null, sessions: req.user ? auth.sessionCount(req.user.id) : 0, expiredEmail: req.expiredEmail || null, provider: PAY_PROVIDER, paymentsEnabled: PAYMENTS_ENABLED && PAY_PROVIDER !== 'none', demoMode: DEMO_MODE, emailProvider: email.PROVIDER }; }
 function fresh(req) { req.user = row('SELECT * FROM users WHERE id = ?', req.user.id); return toClient(req.user); }
 
 async function mail(to, subject, body, link, linkText) { try { await email.send({ to, subject, body, link, linkText }); } catch (e) { console.error('[email] failed:', e.message); } }
 function notFoundOrOk(res) { return res.json({ ok: true }); }
 
 // ---- health / me --------------------------------------------------------------
-r.get('/health', (req, res) => res.json({ ok: true, provider: PAY_PROVIDER, paymentsEnabled: PAYMENTS_ENABLED, email: email.PROVIDER }));
+r.get('/health', (req, res) => res.json({ ok: true, provider: PAY_PROVIDER, paymentsEnabled: PAYMENTS_ENABLED, demoMode: DEMO_MODE, email: email.PROVIDER }));
 function paymentsOpen(req, res, next) { if (!PAYMENTS_ENABLED || PAY_PROVIDER === 'none') return bad(res, 'Purchases are not open yet.', 403); next(); }
 r.get('/me', (req, res) => res.json(meResponse(req)));
 

@@ -78,6 +78,21 @@ function callback(order, over) {
   s = startServer({ RENDER: 'true' });
   check('production with no provider starts with purchases closed', await waitUp(s) && (await (await fetch(s.base + '/api/health')).json()).provider === 'none'); s.stop();
 
+  // ---- demo mode: mock is allowed in production only with DEMO_MODE=true, and says so ----
+  s = startServer({ RENDER: 'true', PAYMENT_PROVIDER: 'mock', DEMO_MODE: 'true', PAYMENTS_ENABLED: 'true' });
+  check('mock starts in production with DEMO_MODE', await waitUp(s));
+  let h = await (await fetch(s.base + '/api/health')).json();
+  check('health reports demo mode', h.provider === 'mock' && h.demoMode === true && h.paymentsEnabled === true);
+  check('env.js tells the game it is a demo', (await (await fetch(s.base + '/env.js')).text()).includes('"demoMode":true'));
+  let dc = client(s);
+  await dc('POST', '/auth/signup', { email: 'demo@example.com', password: 'password1' });
+  let dr = await dc('POST', '/orders', { type: 'theme', id: 'neon' });
+  check('demo order goes to the simulated checkout', dr.status === 200 && dr.d.checkoutUrl.includes('/#/checkout/'));
+  check('me reports demo mode to the client', (await dc('GET', '/me')).d.demoMode === true);
+  s.stop();
+  s = startServer({ RENDER: 'true', PAYMENT_PROVIDER: 'ipay88', IPAY88_MERCHANT_CODE: CODE, IPAY88_MERCHANT_KEY: KEY, DEMO_MODE: 'true' });
+  check('DEMO_MODE does not mark a real provider as demo', await waitUp(s) && (await (await fetch(s.base + '/api/health')).json()).demoMode === false); s.stop();
+
   // ---- PAYMENTS_ENABLED off ----
   s = startServer(Object.assign({}, ipayEnv, { PAYMENTS_ENABLED: 'false' }));
   check('server up with payments off', await waitUp(s));
@@ -177,9 +192,9 @@ function callback(order, over) {
   const a = (await call('GET', '/orders/' + latePaid.id)).d, b = (await call('GET', '/orders/' + lateUnpaid.id)).d;
   check('old order confirmed on the final check is granted, not expired', a.order.status === 'paid' && a.user.purchases.themes.includes('glass'));
   check('old order still unconfirmed is expired with no item', b.order.status === 'expired' && !b.user.purchases.themes.includes('lcd'));
-  downOrders.delete(lateDown.id); // the player's own page poll must not settle it either way; read raw status via the job's next round
+  // Still unreachable while we read it, so neither the job nor this page poll can settle or expire it.
   const c = (await call('GET', '/orders/' + lateDown.id)).d;
-  check('old order that could not be checked stays pending, not expired', (c.order.status === 'pending' || c.order.status === 'processing') && /gateway unreachable/.test(s.log()));
+  check('old order that could not be checked stays pending, not expired', c.order.status === 'pending' && /gateway unreachable/.test(s.log()));
 
   s.stop(); fake.close();
   console.log(fails ? fails + ' FAILED' : 'ALL PASSED');

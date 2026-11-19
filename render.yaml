@@ -42,10 +42,13 @@ services:
         sync: false
       - key: EMAIL_FROM
         sync: false
+      # Demo payments: simulated checkout, clearly labelled, no real money. Switch to ipay88 later (see DEPLOY.md).
       - key: PAYMENT_PROVIDER
-        value: none
+        value: mock
+      - key: DEMO_MODE
+        value: "true"
       - key: PAYMENTS_ENABLED
-        value: "false"
+        value: "true"
       - key: IPAY88_MERCHANT_CODE
         sync: false
       - key: IPAY88_MERCHANT_KEY

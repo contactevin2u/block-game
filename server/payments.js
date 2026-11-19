@@ -9,8 +9,10 @@ const GAME_NAME = process.env.GAME_NAME || global.window.CONFIG.GAME_NAME;
 const PRODUCTION = process.env.NODE_ENV === 'production' || process.env.RENDER === 'true';
 const PROVIDER = (process.env.PAYMENT_PROVIDER || (PRODUCTION ? 'none' : 'mock')).toLowerCase();
 const PAYMENTS_ENABLED = /^(1|true|yes|on)$/i.test(process.env.PAYMENTS_ENABLED || '');
+// DEMO_MODE=true lets the simulated checkout run on a public server, clearly labelled, with no real money.
+const DEMO_MODE = /^(1|true|yes|on)$/i.test(process.env.DEMO_MODE || '');
 function fatal(msg) { console.error('[payments] ' + msg); process.exit(1); }
-if (PRODUCTION && PROVIDER === 'mock') fatal('PAYMENT_PROVIDER=mock is not allowed in production. Set it to none, ipay88 or chip.');
+if (PRODUCTION && PROVIDER === 'mock' && !DEMO_MODE) fatal('PAYMENT_PROVIDER=mock is not allowed in production unless DEMO_MODE=true. Set it to none, ipay88 or chip.');
 if (PROVIDER === 'chip' && !(process.env.CHIP_BRAND_ID && process.env.CHIP_SECRET_KEY)) fatal('PAYMENT_PROVIDER=chip needs CHIP_BRAND_ID and CHIP_SECRET_KEY.');
 if (PROVIDER === 'ipay88' && !(process.env.IPAY88_MERCHANT_CODE && process.env.IPAY88_MERCHANT_KEY)) fatal('PAYMENT_PROVIDER=ipay88 needs IPAY88_MERCHANT_CODE and IPAY88_MERCHANT_KEY.');
 if (!['mock', 'none', 'chip', 'ipay88'].includes(PROVIDER)) fatal('Unknown PAYMENT_PROVIDER "' + PROVIDER + '".');
@@ -110,4 +112,4 @@ const ipay88 = {
 function amountToCents(s) { const m = String(s == null ? '' : s).trim().match(/^(\d+)\.(\d{2})$/); return m ? parseInt(m[1], 10) * 100 + parseInt(m[2], 10) : null; }
 
 const provider = PROVIDER === 'chip' ? chip : PROVIDER === 'ipay88' ? ipay88 : PROVIDER === 'none' ? none : mock;
-module.exports = { provider, PROVIDER, PRODUCTION, PAYMENTS_ENABLED, ipay88, amountToCents };
+module.exports = { provider, PROVIDER, PRODUCTION, PAYMENTS_ENABLED, DEMO_MODE: DEMO_MODE && PROVIDER === 'mock', ipay88, amountToCents };

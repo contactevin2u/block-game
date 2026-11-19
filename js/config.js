@@ -33,10 +33,10 @@ window.CONFIG = {
     { file: 'music/easy-lemon.mp3', title: 'Easy Lemon', artist: 'Kevin MacLeod', license: 'CC BY 4.0', source: 'incompetech.com' },
     { file: 'music/dreamy-flashback.mp3', title: 'Dreamy Flashback', artist: 'Kevin MacLeod', license: 'CC BY 4.0', source: 'incompetech.com' }
   ],
+  // Demo checkout methods. Plain names on purpose: no bank or wallet brands, and nothing asks for real card details.
   PAYMENT_METHODS: [
-    { id: 'tng', name: "Touch 'n Go eWallet", how: 'Opens the TNG app to approve', fee: '1 to 1.5%' },
-    { id: 'fpx', name: 'Online banking (FPX / DuitNow)', how: 'Redirects to your bank login', fee: 'RM 1 flat' },
-    { id: 'card', name: 'Credit or debit card', how: 'Card form, then bank 3-D Secure', fee: '1.8 to 3%' },
-    { id: 'applepay', name: 'Apple Pay', how: 'Face ID or Touch ID', fee: 'As card', appleOnly: true }
+    { id: 'ewallet', name: 'E-wallet', how: 'Demo: approve or cancel on the next screen' },
+    { id: 'bank', name: 'Online banking', how: 'Demo: approve or cancel on the next screen' },
+    { id: 'card', name: 'Card', how: 'Demo: approve or cancel on the next screen' }
   ]
 };
