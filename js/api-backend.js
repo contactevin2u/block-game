@@ -39,6 +39,7 @@
         if (d.user) adopt(d); else { if (d.expiredEmail) expiredInfo = { email: d.expiredEmail }; current = guest(); }
         if (d.emailProvider) env.emailProvider = d.emailProvider;
         if (d.provider) env.provider = d.provider;
+        env.paymentsEnabled = !!d.paymentsEnabled; env.demoMode = !!d.demoMode;
         return current;
       }).catch(function () { current = guest(); return current; });
     },

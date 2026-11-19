@@ -1,6 +1,6 @@
 /* Game-wide settings. Change GAME_NAME here once you pick a name. */
 window.CONFIG = {
-  GAME_NAME: 'tetris.io',
+  GAME_NAME: 'Linezu',
   VERSION: '1.0.0',
   SESSION_DAYS: 30,
   AD_SECONDS: 10,
@@ -33,10 +33,17 @@ window.CONFIG = {
     { file: 'music/easy-lemon.mp3', title: 'Easy Lemon', artist: 'Kevin MacLeod', license: 'CC BY 4.0', source: 'incompetech.com' },
     { file: 'music/dreamy-flashback.mp3', title: 'Dreamy Flashback', artist: 'Kevin MacLeod', license: 'CC BY 4.0', source: 'incompetech.com' }
   ],
+  // Live methods offered by our own picker when PAYMENT_PROVIDER=boost. The player pays on Boost's page.
+  BOOST_METHODS: [
+    { id: 'boost', name: 'Boost', how: 'Boost eWallet' },
+    { id: 'tng', name: "Touch 'n Go", how: "Touch 'n Go eWallet" },
+    { id: 'fpx', name: 'Online banking (FPX)', how: 'Your bank login' },
+    { id: 'card', name: 'Card', how: 'Credit or debit card' }
+  ],
+  // Demo checkout methods. Plain names on purpose: no bank or wallet brands, and nothing asks for real card details.
   PAYMENT_METHODS: [
-    { id: 'tng', name: "Touch 'n Go eWallet", how: 'Opens the TNG app to approve', fee: '1 to 1.5%' },
-    { id: 'fpx', name: 'Online banking (FPX / DuitNow)', how: 'Redirects to your bank login', fee: 'RM 1 flat' },
-    { id: 'card', name: 'Credit or debit card', how: 'Card form, then bank 3-D Secure', fee: '1.8 to 3%' },
-    { id: 'applepay', name: 'Apple Pay', how: 'Face ID or Touch ID', fee: 'As card', appleOnly: true }
+    { id: 'ewallet', name: 'E-wallet', how: 'Demo: approve or cancel on the next screen' },
+    { id: 'bank', name: 'Online banking', how: 'Demo: approve or cancel on the next screen' },
+    { id: 'card', name: 'Card', how: 'Demo: approve or cancel on the next screen' }
   ]
 };

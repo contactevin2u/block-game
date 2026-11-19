@@ -1,8 +1,28 @@
 /* Payment providers. PAYMENT_PROVIDER=chip uses CHIP (chip-in.asia) hosted checkout; =mock simulates it.
    Both expose: createCheckout(order, ctx) -> { checkoutUrl, providerRef } and verify(order) -> 'paid' | 'pending' | 'failed'. */
 'use strict';
+global.window = global.window || {}; require('../js/config.js');
+const GAME_NAME = process.env.GAME_NAME || global.window.CONFIG.GAME_NAME;
 
-const PROVIDER = (process.env.PAYMENT_PROVIDER || 'mock').toLowerCase();
+// Production is any Render service (RENDER=true) or NODE_ENV=production. There, mock may never run and a real
+// provider refuses to start without its keys. Unset in production means 'none': the server runs, purchases are closed.
+const PRODUCTION = process.env.NODE_ENV === 'production' || process.env.RENDER === 'true';
+const PROVIDER = (process.env.PAYMENT_PROVIDER || (PRODUCTION ? 'none' : 'mock')).toLowerCase();
+const PAYMENTS_ENABLED = /^(1|true|yes|on)$/i.test(process.env.PAYMENTS_ENABLED || '');
+// DEMO_MODE=true lets the simulated checkout run on a public server, clearly labelled, with no real money.
+const DEMO_MODE = /^(1|true|yes|on)$/i.test(process.env.DEMO_MODE || '');
+function fatal(msg) { console.error('[payments] ' + msg); process.exit(1); }
+if (PRODUCTION && PROVIDER === 'mock' && !DEMO_MODE) fatal('PAYMENT_PROVIDER=mock is not allowed in production unless DEMO_MODE=true. Set it to none, ipay88 or chip.');
+if (PROVIDER === 'chip' && !(process.env.CHIP_BRAND_ID && process.env.CHIP_SECRET_KEY)) fatal('PAYMENT_PROVIDER=chip needs CHIP_BRAND_ID and CHIP_SECRET_KEY.');
+if (PROVIDER === 'ipay88' && !(process.env.IPAY88_MERCHANT_CODE && process.env.IPAY88_MERCHANT_KEY)) fatal('PAYMENT_PROVIDER=ipay88 needs IPAY88_MERCHANT_CODE and IPAY88_MERCHANT_KEY.');
+if (PROVIDER === 'boost' && !(process.env.BCPG_BASE_URL && process.env.BCPG_CLIENT_ID && process.env.BCPG_CLIENT_SECRET)) fatal('PAYMENT_PROVIDER=boost needs BCPG_BASE_URL, BCPG_CLIENT_ID and BCPG_CLIENT_SECRET.');
+if (!['mock', 'none', 'chip', 'ipay88', 'boost'].includes(PROVIDER)) fatal('Unknown PAYMENT_PROVIDER "' + PROVIDER + '".');
+
+const none = {
+  name: 'none',
+  async createCheckout() { throw new Error('Purchases are not open yet.'); },
+  async verify() { return 'pending'; }
+};
 
 const mock = {
   name: 'mock',
@@ -68,7 +88,7 @@ const ipay88 = {
   startForm(order, ctx) {
     const fields = {
       MerchantCode: this.code(), PaymentId: '', RefNo: order.id, Amount: this.amount(order.price_cents), Currency: 'MYR',
-      ProdDesc: order.name, UserName: ctx.email.split('@')[0].slice(0, 100), UserEmail: ctx.email, UserContact: '-', Remark: 'tetris.io order ' + order.id,
+      ProdDesc: order.name, UserName: ctx.email.split('@')[0].slice(0, 100), UserEmail: ctx.email, UserContact: '-', Remark: (GAME_NAME + ' order ' + order.id).slice(0, 100),
       Lang: 'UTF-8', SignatureType: this.algo.toUpperCase(), Signature: this.requestSignature(order),
       ResponseURL: ctx.baseUrl + '/api/payments/ipay88/response', BackendURL: ctx.apiUrl + '/api/payments/ipay88/backend'
     };
@@ -89,5 +109,79 @@ const ipay88 = {
   }
 };
 
-const provider = PROVIDER === 'chip' ? chip : PROVIDER === 'ipay88' ? ipay88 : mock;
-module.exports = { provider, PROVIDER, ipay88 };
+// Exact cents from an iPay88 amount string such as "12.99". Returns null for anything else: no rounding, no guessing.
+function amountToCents(s) {
+  if (typeof s === 'number') { if (!isFinite(s)) return null; const c = s * 100; return Math.abs(c - Math.round(c)) < 1e-6 ? Math.round(c) : null; }
+  const m = String(s == null ? '' : s).trim().match(/^(\d+)\.(\d{2})$/); return m ? parseInt(m[1], 10) * 100 + parseInt(m[2], 10) : null;
+}
+
+// Boost Connect (BCPG). Production only, no sandbox: tests run against a fake server set by BCPG_BASE_URL.
+// Rules followed exactly as given: Basic auth over an HMAC of METHOD + bare path + the exact body bytes;
+// init with a fresh LZ- reference each attempt; the read-back is the only thing that decides a payment.
+const boost = {
+  name: 'boost',
+  METHODS: ['boost', 'tng', 'fpx', 'card'],
+  base() { return (process.env.BCPG_BASE_URL || '').replace(/\/+$/, ''); },
+  // The signed path is the bare /v1/... path, without the /gateway part of the base URL.
+  sign(method, path, body) {
+    const mac = crypto.createHmac('sha256', process.env.BCPG_CLIENT_SECRET || '').update(method + path + body).digest('base64');
+    return 'Basic ' + Buffer.from((process.env.BCPG_CLIENT_ID || '') + ':' + mac).toString('base64');
+  },
+  async call(method, path, body) {
+    const bytes = body === undefined ? '' : body;
+    const r = await fetch(this.base() + path, { method, headers: { Accept: 'application/json', 'Content-Type': 'application/json', Authorization: this.sign(method, path, bytes) }, body: method === 'GET' ? undefined : bytes });
+    const text = await r.text();
+    let json = null; try { json = text ? JSON.parse(text) : null; } catch (e) {}
+    return { status: r.status, json, text };
+  },
+  reference(orderId) { return 'LZ-' + orderId + '-' + crypto.randomBytes(4).toString('hex'); },
+  description(name) { return String(name || 'Linezu purchase').replace(/[^A-Za-z0-9 .-]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 60) || 'Linezu purchase'; },
+  // Body is built by hand so the amount keeps two decimals as a JSON number, and so the signed bytes are the sent bytes.
+  initBody(order, ctx) {
+    const created = new Date(Date.now() - 10000).toISOString(); // Boost's clock runs 8-9 s behind
+    return '{"referenceId":' + JSON.stringify(order.reference_id) +
+      ',"amount":' + (order.price_cents / 100).toFixed(2) +
+      ',"currency":"MYR","created":' + JSON.stringify(created) +
+      ',"description":' + JSON.stringify(this.description(order.name)) +
+      ',"paymentMethod":' + JSON.stringify(order.method) +
+      ',"returnUrl":' + JSON.stringify(ctx.baseUrl + '/api/payments/boost/return?ref=' + encodeURIComponent(order.reference_id)) +
+      ',"callbackUrl":' + JSON.stringify(ctx.apiUrl + '/api/payments/boost/callback') + '}';
+  },
+  async createCheckout(order, ctx) {
+    if (!this.METHODS.includes(order.method)) throw new Error('Pick Boost, Touch \'n Go, Online banking or Card.');
+    if (!/^https:\/\//.test(ctx.baseUrl) || !/^https:\/\//.test(ctx.apiUrl)) throw new Error('BASE_URL and API_URL must be https for Boost');
+    order.reference_id = this.reference(order.id);
+    if (order.price_cents <= 0) throw new Error('Amount must be more than 0');
+    const body = this.initBody(order, ctx);
+    const r = await this.call('POST', '/v1/payments/init', body); // never retried with the same reference
+    if (r.status !== 200 || !r.json) throw new Error('Boost init failed ' + r.status + (r.text ? ': ' + r.text.slice(0, 200) : ' (no body)'));
+    if (r.json.referenceId !== order.reference_id) throw new Error('Boost returned a different referenceId');
+    if (!/^https:\/\//.test(String(r.json.paymentUrl || ''))) throw new Error('Boost paymentUrl is not https');
+    if (!r.json.uuid) throw new Error('Boost reply has no uuid');
+    return { checkoutUrl: r.json.paymentUrl, providerRef: String(r.json.uuid), referenceId: order.reference_id };
+  },
+  // Read-back. Returns 'paid' only when everything agrees; 'review' when Boost says succeeded but something does not.
+  async verify(order) {
+    this.lastReason = '';
+    if (!order.reference_id) return 'pending';
+    const r = await this.call('GET', '/v1/payments/refs/' + encodeURIComponent(order.reference_id));
+    if (r.status === 404) return 'pending';
+    if (r.status !== 200 || !r.json) throw new Error('Boost read-back failed ' + r.status);
+    const p = r.json, st = String(p.status || '').toLowerCase();
+    if (st === 'succeeded') {
+      const problems = [];
+      if (String(p.uuid || '') !== String(order.provider_ref || '')) problems.push('uuid mismatch');
+      const cents = amountToCents(p.amount);
+      if (cents === null || cents !== order.price_cents) problems.push('amount mismatch: got ' + p.amount + ', expected ' + (order.price_cents / 100).toFixed(2));
+      if (String(p.currency || '') !== 'MYR') problems.push('currency mismatch: ' + p.currency);
+      if (p.reversed === true || String(p.reversed || '').toLowerCase() === 'true') problems.push('reversed');
+      if (problems.length) { this.lastReason = problems.join('; '); return 'review'; }
+      return 'paid';
+    }
+    if (['canceled', 'cancelled', 'expired', 'failed', 'denied', 'error'].includes(st)) { this.lastReason = 'Boost status ' + st; return 'failed'; }
+    return 'pending';
+  }
+};
+
+const provider = PROVIDER === 'chip' ? chip : PROVIDER === 'ipay88' ? ipay88 : PROVIDER === 'boost' ? boost : PROVIDER === 'none' ? none : mock;
+module.exports = { provider, PROVIDER, PRODUCTION, PAYMENTS_ENABLED, DEMO_MODE: DEMO_MODE && PROVIDER === 'mock', ipay88, boost, amountToCents };

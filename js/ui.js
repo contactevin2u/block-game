@@ -47,7 +47,13 @@
   function validEmail(v) { return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v); }
   function passToggle() { $$('[data-toggle-pass]').forEach(function (b) { b.addEventListener('click', function () { var inp = $('#' + b.getAttribute('data-toggle-pass')); inp.type = inp.type === 'password' ? 'text' : 'password'; b.textContent = inp.type === 'password' ? 'Show' : 'Hide'; }); }); }
   function inboxLink() { return testTools() ? '<p class="muted small center">Email is in test mode: messages appear in the <a href="#/inbox">Test inbox</a>.</p>' : ''; }
-  function paymentsMock() { return isLocal() || !root.APP_ENV || root.APP_ENV.provider !== 'chip'; }
+  function paymentsMock() { return isLocal() || !root.APP_ENV || root.APP_ENV.provider === 'mock'; }
+  // Demo payments: the simulated checkout, shown with a clear banner. True in browser-only mode and when the server runs with DEMO_MODE=true.
+  function demoMode() { return isLocal() || !!(root.APP_ENV && root.APP_ENV.demoMode); }
+  function demoBanner() { return demoMode() ? '<div class="notice demo" role="note"><b>Demo: no real money is charged</b><p>Purchases here are pretend. Nothing is sent to any bank or wallet, and you are never asked for card numbers, PINs or phone numbers.</p></div>' : ''; }
+  // PAYMENTS_ENABLED on the server. Browser-only mode is always "open" because its checkout is simulated.
+  function paymentsOpen() { return isLocal() || !!(root.APP_ENV && root.APP_ENV.paymentsEnabled); }
+  function buyButton(label, attr) { return paymentsOpen() ? '<button type="button" class="btn btn-primary" ' + attr + '>' + label + '</button>' : '<button type="button" class="btn btn-secondary" disabled>Purchases open soon</button>'; }
 
   // ---- screens ------------------------------------------------------------------
   var screens = {};
@@ -216,17 +222,17 @@
       body = '<div class="theme-grid">' + T.list.map(function (th) {
         var owned = S.themeOwned(u, th.id), active = (u.settings.theme || 'classic') === th.id, price = C.PRICES.themes[th.id];
         return '<div class="card theme-card"><canvas class="sample" data-theme-id="' + th.id + '"></canvas><div class="theme-body"><div class="row"><b>' + esc(th.name) + '</b><span class="pill ' + (th.tier === 'free' ? 'free' : owned ? 'owned' : 'paid') + '">' + (th.tier === 'free' ? 'Free' : owned ? 'Owned' : money(price)) + '</span></div><p class="muted small">' + esc(th.tagline) + '</p>' +
-          (owned ? (active ? '<button type="button" class="btn btn-secondary" disabled>In use</button>' : '<button type="button" class="btn btn-primary" data-use="' + th.id + '">Use this theme</button>') : '<button type="button" class="btn btn-primary" data-buy="theme:' + th.id + '">Buy · ' + money(price) + '</button>' + (th.id === 'lcd' ? '<p class="muted small center">Or free at level ' + C.LCD_UNLOCK_LEVEL + '</p>' : '')) + '</div></div>';
+          (owned ? (active ? '<button type="button" class="btn btn-secondary" disabled>In use</button>' : '<button type="button" class="btn btn-primary" data-use="' + th.id + '">Use this theme</button>') : buyButton('Buy · ' + money(price), 'data-buy="theme:' + th.id + '"') + (th.id === 'lcd' ? '<p class="muted small center">Or free at level ' + C.LCD_UNLOCK_LEVEL + '</p>' : '')) + '</div></div>';
       }).join('') + '</div>';
     } else if (tab === 'extras') {
-      body = items.filter(function (i) { return i.type === 'removeAds' || i.type === 'bundle'; }).map(function (i) { return '<div class="card"><div class="row"><b>' + esc(i.name) + '</b><span class="pill ' + (i.owned ? 'owned' : 'paid') + '">' + (i.owned ? 'Owned' : money(i.price)) + '</span></div><p class="muted">' + esc(i.desc) + '</p>' + (i.owned ? '' : '<button type="button" class="btn btn-primary" data-buy="' + i.type + ':' + i.id + '">Buy · ' + money(i.price) + '</button>') + '</div>'; }).join('');
+      body = items.filter(function (i) { return i.type === 'removeAds' || i.type === 'bundle'; }).map(function (i) { return '<div class="card"><div class="row"><b>' + esc(i.name) + '</b><span class="pill ' + (i.owned ? 'owned' : 'paid') + '">' + (i.owned ? 'Owned' : money(i.price)) + '</span></div><p class="muted">' + esc(i.desc) + '</p>' + (i.owned ? '' : buyButton('Buy · ' + money(i.price), 'data-buy="' + i.type + ':' + i.id + '"')) + '</div>'; }).join('');
     } else if (tab === 'coins') {
-      body = '<p class="muted">Coins buy equipment for Adventure. You also earn 1 coin per line cleared and stage rewards.</p>' + items.filter(function (i) { return i.type === 'coins'; }).map(function (i) { return '<div class="card row"><div><b>' + esc(i.name) + '</b><p class="muted small">' + esc(i.desc) + '</p></div><button type="button" class="btn btn-primary slim" data-buy="coins:' + i.id + '">' + money(i.price) + '</button></div>'; }).join('');
+      body = '<p class="muted">Coins buy equipment for Adventure. You also earn 1 coin per line cleared and stage rewards.</p>' + items.filter(function (i) { return i.type === 'coins'; }).map(function (i) { return '<div class="card row"><div><b>' + esc(i.name) + '</b><p class="muted small">' + esc(i.desc) + '</p></div>' + (paymentsOpen() ? '<button type="button" class="btn btn-primary slim" data-buy="coins:' + i.id + '">' + money(i.price) + '</button>' : '<button type="button" class="btn btn-secondary slim" disabled>Soon</button>') + '</div>'; }).join('');
     } else {
       body = '<p class="muted">You have <b class="accent">' + u.coins.toLocaleString() + '</b> coins. Use equipment during Classic or Adventure: press 1 to 5 on a keyboard, or tap the bar under the board.</p>' + C.EQUIPMENT.map(function (e) { return '<div class="card row"><div><b>' + esc(e.name) + '</b> <span class="muted small">× ' + (u.inventory[e.id] || 0) + '</span><p class="muted small">' + esc(e.desc) + '</p></div><button type="button" class="btn btn-secondary slim" data-equip-buy="' + e.id + '">' + e.cost + ' coins</button></div>'; }).join('');
     }
-    return header('#/lobby', 'Lobby', '<span class="muted small">Coins <b class="accent">' + u.coins.toLocaleString() + '</b></span>') + '<h1>Shop</h1><div class="chips">' + tabs + '</div>' + body +
-      (paymentsMock() ? '<p class="muted small center">Payments are in test mode: the checkout is simulated and no money moves.</p>' : '');
+    return header('#/lobby', 'Lobby', '<span class="muted small">Coins <b class="accent">' + u.coins.toLocaleString() + '</b></span>') + '<h1>Shop</h1>' + demoBanner() + '<div class="chips">' + tabs + '</div>' + body +
+      (!paymentsOpen() ? '<p class="muted small center">Purchases open soon. Coins you earn by playing already work for equipment.</p>' : '');
   };
   screens.shop.bind = function (p) {
     $$('.sample').forEach(function (cv) { R.drawSample(cv, T.byId(cv.getAttribute('data-theme-id')), 120); });
@@ -236,6 +242,7 @@
       var item = items.filter(function (i) { return i.type === parts[0] && i.id === parts[1]; })[0];
       if (!item) return;
       if (B.isGuest()) { toast('Create an account first so the purchase is saved to it.', 'warn'); return go('#/create'); }
+      if (root.APP_ENV && root.APP_ENV.provider === 'boost') return go('#/pay/method/' + item.type + '/' + item.id);
       b.disabled = true; b.textContent = 'Starting payment';
       S.createOrder(item).then(function (d) {
         if (/^https?:/i.test(d.checkoutUrl)) location.href = d.checkoutUrl; else go(d.checkoutUrl);
@@ -254,22 +261,42 @@
       if (o.status === 'expired' || o.status === 'cancelled' || o.status === 'failed') { box.innerHTML = header('#/shop', 'Shop') + '<h1>Order ' + o.status + '</h1><p class="lead">Nothing was charged.</p><a class="btn btn-primary" href="#/shop">Back to shop</a>'; return; }
       if (o.status === 'paid') { box.innerHTML = header('#/shop', 'Shop') + '<h1>Already paid</h1><a class="btn btn-primary" href="#/shop">Back to shop</a>'; return; }
       var summary = '<div class="card order"><div class="row"><span class="muted">Order</span><b>' + esc(o.id) + '</b></div><div class="row"><span>' + esc(o.item.name) + '</span><b>' + money(o.item.price) + '</b></div></div>';
-      var gw = '<div class="gateway-bar"><span class="pill">Test gateway</span><span class="muted small">This page stands in for the CHIP hosted checkout</span></div>';
+      var gw = demoBanner();
       if (step === 'method' || o.status === 'pending') {
-        var methods = C.PAYMENT_METHODS.filter(function (m) { return !m.appleOnly || isApple(); });
+        var methods = C.PAYMENT_METHODS;
         box.innerHTML = gw + '<h1>Pay ' + money(o.item.price) + '</h1>' + summary + '<p class="eyebrow">Choose how to pay</p>' +
           methods.map(function (m) { return '<button type="button" class="card method" data-method="' + m.id + '"><b>' + esc(m.name) + '</b><span class="muted small">' + esc(m.how) + '</span></button>'; }).join('') +
           '<button type="button" class="link-btn" data-cancel>Cancel and go back</button>';
       } else {
         var m = C.PAYMENT_METHODS.filter(function (x) { return x.id === o.method; })[0] || C.PAYMENT_METHODS[0];
-        var instr = { tng: 'Open the Touch \'n Go eWallet app on your phone and approve the payment request.', fpx: 'You are now on your bank\'s login page. Log in and approve the transfer.', card: 'Enter your card details, then approve the one-time password from your bank.', applepay: 'Confirm with Face ID or Touch ID.' }[m.id];
-        box.innerHTML = gw + '<h1>' + esc(m.name) + '</h1>' + summary + '<div class="card approve"><p>' + instr + '</p><p class="muted small">In the real flow this screen belongs to the bank or wallet. Approve or cancel below to simulate the result.</p>' +
+        var instr = 'This is a demo payment. Nothing is sent to any bank, wallet or card company. Press Approve to simulate a successful payment, or Cancel to simulate a failed one.';
+        box.innerHTML = gw + '<h1>' + esc(m.name) + '</h1>' + summary + '<div class="card approve"><p>' + instr + '</p>' +
           '<button type="button" class="btn btn-primary" data-approve>Approve payment</button><button type="button" class="btn btn-secondary" data-cancel>Cancel</button></div>';
       }
       $$('[data-method]').forEach(function (b) { b.addEventListener('click', function () { S.choose(id, b.getAttribute('data-method')).then(function () { go('#/checkout/' + id + '/approve'); }); }); });
       var ap = $('[data-approve]'); if (ap) ap.addEventListener('click', function () { ap.disabled = true; S.approve(id).then(function () { go('#/pay/return/' + id); }); });
       $$('[data-cancel]').forEach(function (b) { b.addEventListener('click', function () { S.cancel(id).then(function () { toast('Payment cancelled. Nothing was charged.'); go('#/shop'); }); }); });
     });
+  };
+
+  // Our own method picker for Boost Connect: one method per Boost page. The player pays on Boost's page.
+  screens.paymethod = function (p) {
+    var items = S.catalogue(B.user()), item = items.filter(function (i) { return i.type === p[0] && i.id === p[1]; })[0];
+    if (!item) return header('#/shop', 'Shop') + '<h1>Item not found</h1>';
+    return header('#/shop', 'Shop') + '<h1>Pay ' + money(item.price) + '</h1>' +
+      '<div class="card order"><div class="row"><span>' + esc(item.name) + '</span><b>' + money(item.price) + '</b></div></div>' +
+      '<p class="eyebrow">Choose how to pay</p>' + C.BOOST_METHODS.map(function (m) { return '<button type="button" class="card method" data-method="' + m.id + '"><b>' + esc(m.name) + '</b><span class="muted small">' + esc(m.how) + ' · you pay on the secure payment page and come back here</span></button>'; }).join('') +
+      '<p class="muted small center">The item is added to your account after the payment is confirmed.</p><a class="link center" href="#/shop">Cancel</a>';
+  };
+  screens.paymethod.bind = function (p) {
+    var items = S.catalogue(B.user()), item = items.filter(function (i) { return i.type === p[0] && i.id === p[1]; })[0];
+    if (!item) return;
+    $('[data-method]').forEach(function (b) { b.addEventListener('click', function () {
+      $('[data-method]').forEach(function (x) { x.disabled = true; });
+      b.querySelector('b').textContent = 'Opening the payment page';
+      S.createOrder(item, b.getAttribute('data-method')).then(function (d) { location.href = d.checkoutUrl; })
+        .catch(function (err) { $('[data-method]').forEach(function (x) { x.disabled = false; }); b.querySelector('b').textContent = C.BOOST_METHODS.filter(function (m) { return m.id === b.getAttribute('data-method'); })[0].name; toast(err.message, 'warn'); });
+    }); });
   };
 
   screens.payreturn = function (p) {
@@ -281,6 +308,8 @@
       if (!$('#h')) return;
       $('.ring').classList.remove('spin');
       if (o && o.status === 'paid') { $('.ring').innerHTML = '&#10003;'; $('.ring').classList.add('good'); $('#h').textContent = 'Payment received'; $('#msg').textContent = o.item.name + ' is now on your account. A receipt for order ' + o.id + ' was sent to your email.'; }
+      else if (o && o.status === 'review') { $('#h').textContent = 'Payment received, being checked'; $('#msg').textContent = 'Your payment reached us but a detail did not match, so a person will check it. The item is added once that is done. Nothing is charged twice.'; }
+      else if (o && o.status === 'expired') { $('#h').textContent = 'Payment page expired'; $('#msg').textContent = 'The payment page was not completed in time. If you did pay, the item is added automatically once the payment is confirmed, within a few minutes. Otherwise nothing was charged.'; }
       else if (o && (o.status === 'pending' || o.status === 'processing')) { $('#h').textContent = 'Still waiting for the bank'; $('#msg').textContent = 'Your payment has not been confirmed yet. If you completed it, the item will appear on your account within a few minutes. Nothing is charged twice.'; }
       else { $('.ring').innerHTML = '&#10005;'; $('#h').textContent = 'Payment not completed'; $('#msg').textContent = 'The bank did not confirm this order. Nothing was charged.'; }
       $('#done').hidden = false;
@@ -477,7 +506,7 @@
   var routes = [
     [/^\/?$/, 'main'], [/^\/login(?:\/(expired))?$/, 'login'], [/^\/create$/, 'create'], [/^\/forgot$/, 'forgot'], [/^\/reset\/([^/]+)$/, 'reset'], [/^\/confirm-email\/([^/]+)$/, 'confirm-email'], [/^\/inbox$/, 'inbox'],
     [/^\/lobby$/, 'lobby'], [/^\/adventure$/, 'adventure'], [/^\/play\/(classic)$/, 'play'], [/^\/play\/(adventure)\/(\d+)$/, 'play'],
-    [/^\/shop(?:\/(themes|extras|coins|equipment))?$/, 'shop'], [/^\/checkout\/([^/]+)(?:\/(approve))?$/, 'checkout'], [/^\/pay\/return\/([^/]+)$/, 'payreturn'],
+    [/^\/shop(?:\/(themes|extras|coins|equipment))?$/, 'shop'], [/^\/checkout\/([^/]+)(?:\/(approve))?$/, 'checkout'], [/^\/pay\/return\/([^/]+)$/, 'payreturn'], [/^\/pay\/method\/(removeAds|bundle|theme|coins)\/([a-z0-9-]+)$/, 'paymethod'],
     [/^\/settings$/, 'settings'], [/^\/settings\/email$/, 'settingsemail'], [/^\/settings\/password$/, 'settingspassword'],
     [/^\/history(?:\/(all|classic|adventure|battle))?$/, 'history'],
     [/^\/battle$/, 'battle'], [/^\/battle\/join\/([A-Za-z0-9]{6})$/, 'battle'], [/^\/battle\/quick$/, 'battlequick'], [/^\/battle\/local$/, 'battlelocal'], [/^\/battle\/online$/, 'battleonline']
@@ -500,6 +529,7 @@
   }
 
   root.UI = {
+    screens: screens,
     init: function () {
       app = document.getElementById('app');
       app.innerHTML = '<p class="muted center pad">Loading</p>';
