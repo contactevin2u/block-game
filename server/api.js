@@ -168,7 +168,7 @@ function insertRun(userId, x, award) {
     x.result ? String(x.result).slice(0, 10) : null, x.theme ? String(x.theme).slice(0, 20) : null, x.device ? String(x.device).slice(0, 20) : null, x.opponent ? String(x.opponent).slice(0, 40) : null, x.ratingDelta == null ? null : n(x.ratingDelta, 0), n(x.attackSent, 0), coins);
   if (award) {
     const u = row('SELECT * FROM users WHERE id = ?', userId);
-    const best = x.mode === 'classic' && !x.continued ? Math.max(u.best_score, n(x.score, 0)) : u.best_score;
+    const best = x.mode === 'classic' && !x.continued && !x.usedEquipment ? Math.max(u.best_score, n(x.score, 0)) : u.best_score;
     run('UPDATE users SET coins = coins + ?, games_played = games_played + 1, best_score = ?, best_level = MAX(best_level, ?) WHERE id = ?', coins, best, Math.min(99, n(x.level, 1)), userId);
   }
 }

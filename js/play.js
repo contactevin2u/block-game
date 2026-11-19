@@ -64,8 +64,8 @@
     else if (m === 'local') html += playerColumn(0, 'Player 1') + playerColumn(1, 'Player 2');
     else html += playerColumn(0, 'Your', { goal: this.stage ? this.stage.goal.text : null });
     html += '</div>';
-    if (m === 'adventure') {
-      html += '<div class="equip-bar">' + C.EQUIPMENT.map(function (e) { return '<button type="button" class="equip" data-equip="' + e.id + '" title="' + esc(e.desc) + '"><span class="equip-key">' + e.key + '</span><span class="equip-name">' + esc(e.name) + '</span><span class="equip-count" data-count="' + e.id + '">0</span></button>'; }).join('') + '</div>';
+    if (m === 'adventure' || m === 'classic') {
+      html += '<div class="equip-wrap"><div class="equip-head"><span>Equipment</span><span class="muted">' + (isTouch ? 'Tap to use' : 'Press 1 to 5 or tap') + (m === 'classic' ? ' · using one makes the run unranked' : '') + '</span></div><div class="equip-bar">' + C.EQUIPMENT.map(function (e) { return '<button type="button" class="equip" data-equip="' + e.id + '" title="' + esc(e.desc) + '"><span class="equip-key">' + e.key + '</span><span class="equip-name">' + esc(e.name) + '</span><span class="equip-count" data-count="' + e.id + '">0</span></button>'; }).join('') + '</div><p class="equip-empty muted small" hidden>You have no equipment. Buy some with coins in the Shop.</p></div>';
     }
     if (m !== 'local') html += touchControls();
     if (m === 'local') html += '<div class="local-help">' + keyGuide('wasd', 'Player 1 · left board · W A S D') + keyGuide('arrows', 'Player 2 · right board · arrows') + '</div>';
@@ -92,7 +92,7 @@
     this.el.querySelector('[data-do="home"]').addEventListener('click', function () { if (self.ended || self.finished) self.exit(); else if (!self.paused) self.togglePause(); });
     this.el.querySelector('[data-do="track"]').addEventListener('click', function () { if (root.GameAudio) { root.GameAudio.nextTrack(); self.updateNowPlaying(); } });
     this.nowPlayingTimer = setInterval(function () { self.updateNowPlaying(); }, 2000);
-    if (m === 'adventure') {
+    if (m === 'adventure' || m === 'classic') {
       Array.prototype.forEach.call(this.el.querySelectorAll('[data-equip]'), function (btn) { btn.addEventListener('click', function () { self.useEquipment(btn.getAttribute('data-equip')); }); });
       this.refreshEquip();
     }
@@ -120,7 +120,7 @@
       popup: col.querySelector('.popup'), popupTimer: null, input: null, bot: null
     };
     if (keymap) {
-      p.input = new root.Input(game, { keymap: keymap, onPause: function () { self.togglePause(); }, onEquip: this.mode === 'adventure' ? function (k) { var e = C.EQUIPMENT.filter(function (q) { return q.key === k; })[0]; if (e) self.useEquipment(e.id); } : null });
+      p.input = new root.Input(game, { keymap: keymap, onPause: function () { self.togglePause(); }, onEquip: (this.mode === 'adventure' || this.mode === 'classic') ? function (k) { var e = C.EQUIPMENT.filter(function (q) { return q.key === k; })[0]; if (e) self.useEquipment(e.id); } : null });
       var tc = this.el.querySelector('.touch-controls');
       if (tc && idx === 0) { p.input.bindButtons(tc); p.input.bindSwipe(col.querySelector('.board')); }
     }
@@ -185,7 +185,7 @@
 
   GameScreen.prototype.layout = function () {
     var m = this.mode, topH = this.el.querySelector('.play-top').offsetHeight;
-    var tc = this.el.querySelector('.touch-controls'), eq = this.el.querySelector('.equip-bar'), help = this.el.querySelector('.local-help');
+    var tc = this.el.querySelector('.touch-controls'), eq = this.el.querySelector('.equip-wrap'), help = this.el.querySelector('.local-help');
     var reserved = topH + (tc ? tc.offsetHeight : 0) + (eq ? eq.offsetHeight : 0) + (help ? help.offsetHeight : 0) + 28;
     var availH = Math.max(200, (window.innerHeight - this.root.getBoundingClientRect().top) - reserved);
     var width = this.area.clientWidth || this.root.clientWidth;
@@ -397,11 +397,14 @@
   // ---- equipment ------------------------------------------------------------
   GameScreen.prototype.refreshEquip = function () {
     var inv = this.user.inventory || {};
-    Array.prototype.forEach.call(this.el.querySelectorAll('[data-count]'), function (el) { var n = inv[el.getAttribute('data-count')] || 0; el.textContent = n; el.parentNode.classList.toggle('empty', n === 0); });
+    var any = false;
+    Array.prototype.forEach.call(this.el.querySelectorAll('[data-count]'), function (el) { var n = inv[el.getAttribute('data-count')] || 0; el.textContent = n; el.parentNode.classList.toggle('empty', n === 0); if (n > 0) any = true; });
+    var hint = this.el.querySelector('.equip-empty'); if (hint) hint.hidden = any;
   };
   GameScreen.prototype.useEquipment = function (id) {
-    if (this.mode !== 'adventure' || this.paused || this.finished) return;
+    if ((this.mode !== 'adventure' && this.mode !== 'classic') || this.paused || this.finished || this.ended) return;
     var p = this.players[0], g = p.game;
+    if (this.mode === 'classic' && !this.usedEquipment && this.user.inventory[id] > 0 && id !== 'swap') this.popup(p, 'Assisted run · not ranked');
     if (!(this.user.inventory[id] > 0)) { this.popup(p, 'None left. Buy more in the shop.'); return; }
     var self = this;
     if (id === 'swap') { this.pickSwap(); return; }
