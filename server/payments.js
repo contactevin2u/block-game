@@ -44,5 +44,50 @@ const chip = {
   }
 };
 
-const provider = PROVIDER === 'chip' ? chip : mock;
-module.exports = { provider, PROVIDER };
+// iPay88 (now ADAPTIS). The player is sent to iPay88's page by a browser form POST; iPay88 posts the result back to
+// ResponseURL (browser) and BackendURL (server to server). Every result is verified by signature and by a re-query.
+const crypto = require('crypto');
+const ipay88 = {
+  name: 'ipay88',
+  entry: process.env.IPAY88_ENTRY_URL || 'https://payment.ipay88.com.my/ePayment/entry.asp',
+  requery: process.env.IPAY88_REQUERY_URL || 'https://payment.ipay88.com.my/ePayment/enquiry.asp',
+  algo: (process.env.IPAY88_SIG_ALGO || 'sha256').toLowerCase(),
+  code() { return process.env.IPAY88_MERCHANT_CODE || ''; },
+  key() { return process.env.IPAY88_MERCHANT_KEY || ''; },
+  amount(cents) { return (cents / 100).toFixed(2); },
+  sign(parts) { return crypto.createHash(this.algo).update(parts.join('')).digest('hex'); },
+  requestSignature(order) { return this.sign([this.key(), this.code(), order.id, this.amount(order.price_cents).replace(/[.,]/g, ''), 'MYR']); },
+  responseSignature(f) { return this.sign([this.key(), this.code(), f.PaymentId || '', f.RefNo || '', String(f.Amount || '').replace(/[.,]/g, ''), f.Currency || 'MYR', f.Status || '']); },
+  validResponse(f) { const a = String(f.Signature || '').toLowerCase(), b = this.responseSignature(f).toLowerCase(); return a.length === b.length && crypto.timingSafeEqual(Buffer.from(a), Buffer.from(b)); },
+  async createCheckout(order, ctx) {
+    if (!this.code() || !this.key()) throw new Error('IPAY88_MERCHANT_CODE and IPAY88_MERCHANT_KEY must be set');
+    // The start page lives on the game's own address (proxied to this server), so the player's session cookie is sent.
+    return { checkoutUrl: ctx.baseUrl + '/api/payments/ipay88/start/' + order.id, providerRef: null };
+  },
+  // Hidden form that submits itself to iPay88.
+  startForm(order, ctx) {
+    const fields = {
+      MerchantCode: this.code(), PaymentId: '', RefNo: order.id, Amount: this.amount(order.price_cents), Currency: 'MYR',
+      ProdDesc: order.name, UserName: ctx.email.split('@')[0].slice(0, 100), UserEmail: ctx.email, UserContact: '-', Remark: 'tetris.io order ' + order.id,
+      Lang: 'UTF-8', SignatureType: this.algo.toUpperCase(), Signature: this.requestSignature(order),
+      ResponseURL: ctx.baseUrl + '/api/payments/ipay88/response', BackendURL: ctx.apiUrl + '/api/payments/ipay88/backend'
+    };
+    const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    return `<!doctype html><html><head><meta charset="utf-8"><title>Redirecting to iPay88</title></head><body style="font-family:sans-serif;padding:40px;text-align:center">
+<p>Taking you to the secure payment page</p>
+<form id="f" method="post" action="${esc(this.entry)}">${Object.keys(fields).map((k) => `<input type="hidden" name="${esc(k)}" value="${esc(fields[k])}">`).join('')}
+<noscript><button type="submit">Continue to payment</button></noscript></form>
+<script>document.getElementById('f').submit();</script></body></html>`;
+  },
+  async verify(order) {
+    const body = new URLSearchParams({ MerchantCode: this.code(), RefNo: order.id, Amount: this.amount(order.price_cents) });
+    const r = await fetch(this.requery, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body });
+    const t = (await r.text()).trim();
+    if (t === '00') return 'paid';
+    if (/fail|invalid|incorrect|not found|m88admin/i.test(t)) return t.toLowerCase().includes('not found') ? 'pending' : 'failed';
+    return 'pending';
+  }
+};
+
+const provider = PROVIDER === 'chip' ? chip : PROVIDER === 'ipay88' ? ipay88 : mock;
+module.exports = { provider, PROVIDER, ipay88 };

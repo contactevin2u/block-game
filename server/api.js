@@ -4,7 +4,7 @@ const express = require('express');
 const { row, all, run, db } = require('./db');
 const auth = require('./auth');
 const email = require('./email');
-const { provider: pay, PROVIDER: PAY_PROVIDER } = require('./payments');
+const { provider: pay, PROVIDER: PAY_PROVIDER, ipay88 } = require('./payments');
 
 global.window = global.window || {};
 require('../js/config.js');
@@ -253,6 +253,39 @@ r.post('/payments/chip/callback', express.urlencoded({ extended: false }), async
   if (!o) return res.status(200).send('ignored');
   try { if ((await pay.verify(o)) === 'paid') grant(o.id); } catch (e) { console.error('[chip callback]', e.message); }
   res.send('ok');
+});
+
+// ---- iPay88 (ADAPTIS) ---------------------------------------------------------------
+// Start page: the player's browser lands here from the shop and is auto-submitted to iPay88.
+r.get('/payments/ipay88/start/:id', (req, res) => {
+  if (pay.name !== 'ipay88') return res.status(404).send('Not available');
+  if (!req.user) return res.redirect(baseUrl(req) + '/#/login');
+  const o = row('SELECT * FROM orders WHERE id = ? AND user_id = ?', req.params.id, req.user.id);
+  if (!o || o.status !== 'pending') return res.redirect(baseUrl(req) + '/#/pay/return/' + req.params.id);
+  res.type('html').send(ipay88.startForm(o, { baseUrl: baseUrl(req), apiUrl: apiUrl(req), email: req.user.email }));
+});
+async function ipay88Result(f) {
+  const o = f && f.RefNo ? row('SELECT * FROM orders WHERE id = ?', String(f.RefNo)) : null;
+  if (!o) return null;
+  if (!ipay88.validResponse(f)) { console.warn('[ipay88] bad signature for', o.id); return o; }
+  if (f.TransId && !o.provider_ref) run('UPDATE orders SET provider_ref = ?, method = ? WHERE id = ?', String(f.TransId).slice(0, 64), String(f.PaymentId || '').slice(0, 20), o.id);
+  if (String(f.Status) === '1') {
+    // Signature ok and iPay88 says paid; confirm with a re-query before granting.
+    try { if ((await ipay88.verify(o)) === 'paid') return grant(o.id); } catch (e) { console.error('[ipay88 requery]', e.message); }
+    return row('SELECT * FROM orders WHERE id = ?', o.id);
+  }
+  if (o.status === 'pending') run('UPDATE orders SET status = ? WHERE id = ?', 'failed', o.id);
+  return row('SELECT * FROM orders WHERE id = ?', o.id);
+}
+// Browser return (ResponseURL): verify, then send the player to the game's result page.
+r.post('/payments/ipay88/response', express.urlencoded({ extended: false }), async (req, res) => {
+  const o = await ipay88Result(req.body);
+  res.redirect(baseUrl(req) + '/#/pay/return/' + (o ? o.id : (req.body && req.body.RefNo) || ''));
+});
+// Server-to-server (BackendURL): iPay88 expects the text RECEIVEOK.
+r.post('/payments/ipay88/backend', express.urlencoded({ extended: false }), async (req, res) => {
+  try { await ipay88Result(req.body); } catch (e) { console.error('[ipay88 backend]', e.message); }
+  res.type('text').send('RECEIVEOK');
 });
 
 // Dev inbox (console email provider only).

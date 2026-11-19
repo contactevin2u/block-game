@@ -81,7 +81,15 @@ Free plan: 300 emails a day, which covers thousands of players. Later, verifying
 
 Without a domain, Resend can only send to your own email address, which is fine for testing.
 
-## 6. Real payments with CHIP
+## 6a. Real payments with an existing iPay88 (ADAPTIS) account
+
+1. Ask iPay88 support to register the game's address on the merchant account (they accept payments only from the website on file). Give them the exact address players use, for example `https://block-game-smoky.vercel.app`, or your custom domain. If the account's current website still needs iPay88, ask for a second merchant account for the game instead.
+2. On Render set `PAYMENT_PROVIDER=ipay88`, `IPAY88_MERCHANT_CODE=` your code, `IPAY88_MERCHANT_KEY=` the key from iPay88's "MERCHANT KEY" email. Keep `BASE_URL` as the game's address and `API_URL` as the Render address.
+3. Buy the cheapest item. The player is sent to iPay88's page, pays, and returns to Payment received. The item is granted only after the signed result is confirmed by a re-query to iPay88.
+
+If iPay88 reports a signature error, the account may be on the older SHA1 scheme: set `IPAY88_SIG_ALGO=sha1`.
+
+## 6b. Real payments with CHIP
 
 1. Register at chip-in.asia as a merchant. Verification takes a few days.
 2. In the portal: create a Brand, copy the Brand ID. Create an API key, copy the Secret key. Enable FPX, DuitNow QR, Touch 'n Go eWallet, cards, and Apple Pay on the brand.
