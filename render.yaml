@@ -42,11 +42,11 @@ services:
         sync: false
       - key: EMAIL_FROM
         sync: false
-      # Demo payments: simulated checkout, clearly labelled, no real money. Switch to ipay88 later (see DEPLOY.md).
+      # Live payments through Boost Connect (production, real money). BCPG_* are set in the Render dashboard.
       - key: PAYMENT_PROVIDER
-        value: mock
+        value: boost
       - key: DEMO_MODE
-        value: "true"
+        value: "false"
       - key: PAYMENTS_ENABLED
         value: "true"
       - key: BCPG_BASE_URL
