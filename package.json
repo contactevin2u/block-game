@@ -7,13 +7,14 @@
   "scripts": {
     "start": "node server/index.js",
     "dev": "node --watch server/index.js",
-    "test": "node test/engine.test.js && node test/flows.test.js"
+    "test": "node test/engine.test.js && node test/flows.test.js && node test/server.test.js && node test/online.test.js"
   },
   "engines": {
     "node": ">=22.13"
   },
   "dependencies": {
     "express": "^4.22.3",
-    "nodemailer": "^6.10.1"
+    "nodemailer": "^6.10.1",
+    "ws": "^8.23.0"
   }
 }

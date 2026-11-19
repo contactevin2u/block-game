@@ -56,11 +56,11 @@
   }
 
   GameScreen.prototype.build = function () {
-    var m = this.mode, label = { classic: 'Classic', adventure: this.stage ? this.stage.name : 'Adventure', battle: 'Battle · vs computer', local: 'Local 2-player' }[m];
+    var m = this.mode, label = { classic: 'Classic', adventure: this.stage ? this.stage.name : 'Adventure', battle: 'Battle · vs computer', local: 'Local 2-player', online: (this.opts.match && this.opts.match.ranked ? 'Ranked battle' : 'Friendly battle') + ' · online' }[m];
     var html = '<div class="play mode-' + m + ' theme-' + this.theme.id + (this.theme.light ? ' theme-light' : '') + '">' +
       '<div class="play-top"><div class="topbar-left"><button type="button" class="logo logo-btn" data-do="home" aria-label="' + esc(C.GAME_NAME) + ', open menu"><svg aria-hidden="true" width="22" height="22" viewBox="0 0 26 26"><rect x="9" y="1" width="8" height="8" rx="1.5" fill="#a64ddb"/><rect x="1" y="9" width="8" height="8" rx="1.5" fill="#a64ddb"/><rect x="9" y="9" width="8" height="8" rx="1.5" fill="#a64ddb"/><rect x="17" y="9" width="8" height="8" rx="1.5" fill="#a64ddb"/><rect x="1" y="17" width="8" height="8" rx="1.5" fill="#1ec8e8"/><rect x="9" y="17" width="8" height="8" rx="1.5" fill="#f5d020"/><rect x="17" y="17" width="8" height="8" rx="1.5" fill="#e8453c"/></svg><span>' + esc(C.GAME_NAME) + '</span></button><button type="button" class="link-btn" data-do="pause">&#10074;&#10074; Pause</button></div><span class="play-label">' + esc(label) + '</span><button type="button" class="link-btn play-theme" data-do="track" title="Next song">&#9835; <span class="now-playing">' + esc(this.theme.name) + '</span></button></div>' +
       '<div class="play-area">';
-    if (m === 'battle') html += playerColumn(0, 'Your', { attack: true }) + playerColumn(1, 'Opponent', { attack: true });
+    if (m === 'battle' || m === 'online') html += playerColumn(0, 'Your', { attack: true }) + playerColumn(1, 'Opponent', { attack: true });
     else if (m === 'local') html += playerColumn(0, 'Player 1') + playerColumn(1, 'Player 2');
     else html += playerColumn(0, 'Your', { goal: this.stage ? this.stage.goal.text : null });
     html += '</div>';
@@ -98,7 +98,7 @@
     }
     this.onResize = function () { self.layout(); };
     window.addEventListener('resize', this.onResize);
-    this.onVis = function () { if (document.hidden && self.running && !self.paused && !self.finished) self.togglePause(); };
+    this.onVis = function () { if (self.mode !== 'online' && document.hidden && self.running && !self.paused && !self.finished) self.togglePause(); };
     document.addEventListener('visibilitychange', this.onVis);
   };
 
@@ -140,6 +140,13 @@
       this.opponent = { name: ['BlockRunner', 'Tetro_99', 'LineQueen', 'StackSmith', 'KickFlip'][seed % 5], rating: rating + Math.round((this.rand01(seed) - 0.5) * 120) };
       this.players.push(p2);
       this.el.querySelector('[data-player="1"] .side-left').insertAdjacentHTML('afterbegin', '<div class="box opp"><span class="box-label">Opponent</span><b>' + esc(this.opponent.name) + '</b><span class="muted">' + this.opponent.rating + '</span></div>');
+    } else if (m === 'online') {
+      var match = this.opts.match;
+      this.players.push(this.makePlayer(0, new E.Game({ seed: match.seed, startLevel: 1, levelUp: false }), 'arrows'));
+      this.players.push(this.makePlayer(1, new RemoteBoard(), null));
+      this.opponent = { name: match.opp.name, rating: match.opp.rating };
+      this.el.querySelector('[data-player="1"] .side-left').insertAdjacentHTML('afterbegin', '<div class="box opp"><span class="box-label">Opponent</span><b>' + esc(this.opponent.name) + '</b><span class="muted">' + this.opponent.rating + '</span><span class="muted small opp-status"></span></div>');
+      this.bindOnline();
     } else if (m === 'local') {
       this.players.push(this.makePlayer(0, new E.Game({ seed: seed, levelUp: false }), 'wasd'));   // Player 1, left board
       this.players.push(this.makePlayer(1, new E.Game({ seed: seed, levelUp: false }), 'arrows')); // Player 2, right board
@@ -170,6 +177,65 @@
   };
 
   GameScreen.prototype.rand01 = function (n) { return ((n * 9301 + 49297) % 233280) / 233280; };
+
+  // ---- online battle: the opponent's board is a picture of what their device sends --------------------
+  function RemoteBoard() {
+    this.grid = []; for (var y = 0; y < E.ROWS; y++) this.grid.push(new Array(E.COLS).fill(0));
+    this.clearingRows = []; this.phase = 'remote'; this.phaseTimer = 0; this.clearDuration = 1; this.current = null; this.pendingGarbage = 0;
+    this.score = 0; this.lines = 0; this.level = 1; this.time = 0; this.hold = null; this.queue = []; this.over = false; this.continues = 0;
+    this.stats = { attackSent: 0, garbageTaken: 0, pieces: 0, tetrises: 0, tspins: 0 };
+  }
+  RemoteBoard.prototype.update = function (dt) { this.time += dt; return []; };
+  RemoteBoard.prototype.setSoftDrop = function () {};
+  RemoteBoard.prototype.apply = function (m) {
+    var g = String(m.g || '');
+    for (var y = 0; y < E.ROWS; y++) for (var x = 0; x < E.COLS; x++) { var ch = g[y * E.COLS + x]; this.grid[y][x] = ch && ch !== '.' ? ch : 0; }
+    this.score = m.s || 0; this.lines = m.l || 0; this.level = m.lv || 1; this.hold = m.h || null; this.queue = m.n || [];
+  };
+  // Pack my board, with the falling piece baked in, as one string the opponent can draw.
+  function packBoard(g) {
+    var rows = [];
+    for (var y = 0; y < E.ROWS; y++) rows.push(g.grid[y].map(function (c) { return c || '.'; }));
+    if (g.current && g.phase === 'play') g.cells(g.current).forEach(function (c) { if (c[1] >= 0 && c[1] < E.ROWS) rows[c[1]][c[0]] = g.current.type; });
+    return rows.map(function (r) { return r.join(''); }).join('');
+  }
+  GameScreen.prototype.bindOnline = function () {
+    var self = this, Net = root.Net, p0 = this.players[0], p1 = this.players[1];
+    this.netOff = [];
+    this.netOff.push(Net.on('state', function (m) { p1.game.apply(m); }));
+    this.netOff.push(Net.on('attack', function (m) { p0.game.receiveGarbage(m.n | 0); p1.game.stats.attackSent += m.n | 0; }));
+    this.netOff.push(Net.on('result', function (m) { self.onlineResult(m); }));
+    this.netOff.push(Net.on('opp_away', function (m) { self.setOppStatus('Reconnecting, ' + m.seconds + ' s'); self.popup(p1, 'Opponent lost connection'); }));
+    this.netOff.push(Net.on('opp_back', function () { self.setOppStatus(''); self.popup(p1, 'Opponent is back'); }));
+    this.netOff.push(Net.on('rematch_wait', function () { var el = self.overlay.querySelector('.rematch-note'); if (el) el.textContent = 'Your opponent wants a rematch.'; }));
+    this.netOff.push(Net.on('start', function (m) { self.opts.match = m.match; self.restart(); }));
+    this.netOff.push(Net.on('close', function () { if (!self.finished) self.setOppStatus('Connection lost, reconnecting'); }));
+    this.netOff.push(Net.on('open', function () { self.setOppStatus(''); }));
+    this.lastSend = 0; this.lastPacked = '';
+  };
+  GameScreen.prototype.setOppStatus = function (t) { var el = this.el.querySelector('.opp-status'); if (el) el.textContent = t; };
+  GameScreen.prototype.sendState = function (now) {
+    if (now - this.lastSend < 120) return;
+    var g = this.players[0].game, packed = packBoard(g);
+    if (packed === this.lastPacked && g.score === this.lastScore) return;
+    this.lastSend = now; this.lastPacked = packed; this.lastScore = g.score;
+    root.Net.send({ t: 'state', g: packed, s: Math.floor(g.score), l: g.lines, lv: g.level, h: g.hold, n: g.queue.slice(0, 5) });
+  };
+  GameScreen.prototype.onlineResult = function (m) {
+    this.finished = true; this.ended = true;
+    var g = this.players[0].game, won = !!m.won;
+    sfx(won ? 'win' : 'over');
+    if (!B.isGuest()) { if (m.ranked) this.user.rating = m.rating; this.user.battles[won ? 'w' : 'l']++; B.persist(); }
+    var why = { topout: won ? 'Your opponent topped out' : 'You topped out', disconnect: won ? 'Your opponent lost connection' : 'You lost connection', quit: won ? 'Your opponent left' : 'You left' }[m.reason] || '';
+    var html = '<div class="panel over"><div class="panel-head"><p class="eyebrow ' + (won ? 'good' : 'danger') + '">' + (won ? 'Victory' : 'Defeat') + '</p><h2>' + (won ? 'You win' : esc(this.opponent.name) + ' wins') + '</h2></div>' +
+      (m.ranked ? '<div class="hero-score"><span>Rating</span><b>' + m.rating + '</b><em class="badge ' + (won ? '' : 'badge-muted') + '">' + (m.delta > 0 ? '+' : '') + m.delta + '</em></div>' : '<p class="muted">' + esc(why) + ' · friendly match, no rating change</p>') +
+      '<div class="stat-strip"><div><span>Sent</span><b>' + g.stats.attackSent + '</b></div><div><span>Taken</span><b>' + g.stats.garbageTaken + '</b></div><div><span>Lines</span><b>' + g.lines + '</b></div><div><span>Time</span><b>' + fmtTime(g.time) + '</b></div></div>' +
+      '<p class="muted small rematch-note">' + (m.ranked ? esc(why) : '') + '</p>' +
+      '<div class="panel-actions"><button type="button" class="btn btn-primary" data-do="rematch">Rematch</button><button type="button" class="link-btn" data-do="quit">Back to battle</button></div></div>';
+    this.setOverlay(html);
+    var self = this;
+    this.bindOverlay({ rematch: function () { root.Net.send({ t: 'rematch' }); var b = self.overlay.querySelector('[data-do="rematch"]'); b.disabled = true; b.textContent = 'Waiting for opponent'; }, quit: function () { self.exit(); } });
+  };
 
   GameScreen.prototype.showCountdown = function () {
     var self = this, n = 3;
@@ -223,6 +289,7 @@
     var user = this.user;
     this.players.forEach(function (p) { p.renderer.draw(p.game, { ghost: user.settings.ghost !== false, dim: !!p.out }); });
     if (now - this.lastHud > 80) { this.lastHud = now; this.players.forEach(function (p) { self.updateHud(p); }); }
+    if (this.mode === 'online') this.sendState(now);
     if (this.stage && !this.finished && A.goalMet(this.stage, this.players[0].game)) this.stageComplete();
   };
 
@@ -255,6 +322,9 @@
           var other = this.players[1 - p.idx];
           var remaining = p.game.cancelGarbage(ev.attack);
           if (remaining > 0 && !other.out) { other.game.receiveGarbage(remaining); p.game.stats.attackSent += remaining; }
+        } else if (m === 'online' && p.idx === 0) {
+          var rem = p.game.cancelGarbage(ev.attack);
+          if (rem > 0) { root.Net.send({ t: 'attack', n: rem }); p.game.stats.attackSent += rem; }
         }
         break;
       case 'lock': if (p.idx === 0 || m === 'local') sfx('lock'); break;
@@ -282,6 +352,17 @@
       return;
     }
     if (m === 'battle') return this.battleEnd(1 - p.idx);
+    if (m === 'online') {
+      // The server decides the result. Tell it, then wait for its verdict.
+      this.ended = true;
+      if (p.input) p.input.enabled = false;
+      this.sendState(performance.now() + 1000);
+      root.Net.send({ t: 'topout' });
+      this.setOverlay('<div class="panel"><div class="panel-head"><p class="eyebrow danger">' + esc(reason) + '</p><h2>Topped out</h2></div><p class="muted">Waiting for the result</p></div>');
+      var self = this;
+      setTimeout(function () { if (!self.finished) self.onlineResult({ won: false, ranked: false, reason: 'topout', rating: self.user.rating, delta: 0 }); }, 6000);
+      return;
+    }
     this.ended = true; // keeps the pause overlay from replacing this screen
     this.players.forEach(function (q) { q.renderer.draw(q.game, { dim: true }); });
     this.updateHud(p);
@@ -441,6 +522,14 @@
   };
   GameScreen.prototype.togglePause = function () {
     if (this.finished || this.ended || !this.running) return;
+    if (this.mode === 'online') {
+      // Online matches cannot pause: show the menu, keep playing.
+      if (!this.overlay.hidden) { this.hideOverlay(); return; }
+      this.setOverlay('<div class="panel"><div class="panel-head"><p class="eyebrow">Online match</p><h2>Menu</h2></div><p class="muted small">The match keeps running while this is open.</p><div class="panel-actions"><button type="button" class="btn btn-primary" data-do="resume">Back to the match</button><button type="button" class="btn btn-danger" data-do="quit">Give up</button></div></div>');
+      var self2 = this;
+      this.bindOverlay({ resume: function () { self2.hideOverlay(); }, quit: function () { root.Net.send({ t: 'quit' }); self2.exit(); } });
+      return;
+    }
     if (root.GameAudio) root.GameAudio.duck(!this.paused);
     if (!this.paused) {
       this.paused = true;
@@ -459,6 +548,7 @@
     this.teardownPlayers(); this.hideOverlay();
     this.saved = false; this.coinsEarned = 0; this.stageCoins = 0; this.usedEquipment = false; this.slowTimer = 0; this.finished = false; this.ended = false;
     Array.prototype.forEach.call(this.el.querySelectorAll('.opp, .out-badge'), function (n) { n.remove(); });
+    if (this.netOff) { this.netOff.forEach(function (f) { f(); }); this.netOff = null; }
     cancelAnimationFrame(this.raf); this.running = false;
     this.start();
   };
@@ -466,6 +556,7 @@
   GameScreen.prototype.exit = function () { this.destroy(); if (this.opts.onExit) this.opts.onExit(); else location.hash = '#/lobby'; };
   GameScreen.prototype.destroy = function () {
     this.running = false; cancelAnimationFrame(this.raf);
+    if (this.netOff) { this.netOff.forEach(function (f) { f(); }); this.netOff = null; if (this.mode === 'online' && !this.finished && root.Net) root.Net.send({ t: 'quit' }); }
     clearInterval(this.nowPlayingTimer);
     if (root.GameAudio) root.GameAudio.stopMusic();
     this.teardownPlayers();

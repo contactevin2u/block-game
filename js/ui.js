@@ -401,27 +401,76 @@
     });
   };
 
+  function onlineAvailable() { return !!(root.Net && root.Net.available()); }
   screens.battle = function (p) {
     var u = B.user(), rating = u.rating || 1000;
     var rank = rating < 900 ? 'Bronze' : rating < 1100 ? 'Silver' : rating < 1300 ? 'Gold' : rating < 1500 ? 'Platinum' : 'Diamond';
+    var online = onlineAvailable();
     return header('#/lobby', 'Lobby') + '<h1>Battle</h1>' +
-      '<div class="card row"><div><b>' + rank + '</b><p class="muted small">' + rating.toLocaleString() + ' rating · ' + u.battles.w + ' W ' + u.battles.l + ' L</p></div></div>' +
+      '<div class="card row"><div><b>' + rank + '</b><p class="muted small">' + rating.toLocaleString() + ' rating · ' + u.battles.w + ' W ' + u.battles.l + ' L</p></div>' + (B.isGuest() ? '<span class="muted small">Guests play unranked</span>' : '') + '</div>' +
       '<div id="idle">' +
-      '<button type="button" class="btn btn-primary stack" id="quick">Quick match<small>1 v 1 ranked · computer opponent, online players coming soon</small></button>' +
-      '<button type="button" class="btn btn-secondary stack" id="room">Create a room<small>Invite friends with a code or link</small></button>' +
-      '<div class="field"><label for="code">Join a friend\'s room</label><div class="row gap"><input class="input code" id="code" maxlength="6" placeholder="Room code" autocomplete="off"><button type="button" class="btn btn-secondary slim" id="join">Join</button></div><p class="err" data-err="code"></p></div>' +
+      '<button type="button" class="btn btn-primary stack" id="quick">Quick match<small>' + (online ? '1 v 1 ranked · finds a player near your rating' : '1 v 1 · computer opponent') + '</small></button>' +
+      (online ? '<button type="button" class="btn btn-secondary stack" id="room">Create a room<small>Invite a friend with a code or link</small></button>' +
+        '<div class="field"><label for="code">Join a friend\'s room</label><div class="row gap"><input class="input code" id="code" maxlength="6" placeholder="Room code" autocomplete="off"><button type="button" class="btn btn-secondary slim" id="join">Join</button></div><p class="err" data-err="code"></p></div>' : '<p class="muted small center">Online rooms need the game server. Open the game from its web address to play online.</p>') +
       (canLocal() ? '<a class="btn btn-secondary stack" href="#/battle/local">Local 2-player<small>Two players on this keyboard</small></a>' : '<p class="muted small center">Local 2-player needs a PC with a keyboard.</p>') +
       '</div>' +
-      '<div id="online" hidden class="notice"><b>Online rooms are coming soon</b><p>Rooms with a code and link need the online match server, which is the next thing being built. For now you can play Quick match against the computer' + (canLocal() ? ' or Local 2-player on one keyboard' : '') + '.</p><button type="button" class="link-btn" id="online-ok">OK</button></div>' +
+      '<div id="searching" hidden class="card center"><div class="dots"><i></i><i></i><i></i></div><h2>Finding an opponent</h2><p class="muted" id="search-txt">0:00 · rating ' + rating + '</p><p class="muted small">If nobody joins within 20 seconds you can play the computer instead.</p><button type="button" class="btn btn-danger" id="cancel">Cancel</button></div>' +
+      '<div id="nomatch" hidden class="card center"><h2>Nobody is waiting right now</h2><p class="muted">Play the computer, or keep waiting for a player.</p><div class="panel-actions"><a class="btn btn-primary" href="#/battle/quick">Play the computer</a><button type="button" class="btn btn-secondary" id="wait-more">Keep waiting</button><button type="button" class="link-btn" id="nomatch-back">Back</button></div></div>' +
+      '<div id="room-view" hidden class="card" style="gap:14px">' +
+        '<div class="center"><p class="eyebrow">Room code</p><b class="room-code" id="room-code"></b><div class="row gap" style="justify-content:center"><button type="button" class="btn btn-secondary slim" id="copy-code">Copy code</button><button type="button" class="btn btn-secondary slim" id="copy-link">Copy link</button></div><p class="muted small">Your friend enters the code on their Battle screen, or opens the link.</p></div>' +
+        '<div id="room-players"></div>' +
+        '<div class="panel-actions"><button type="button" class="btn btn-primary" id="ready">Ready</button><button type="button" class="btn btn-secondary" id="start-room" hidden>Start match</button><button type="button" class="link-btn" id="leave">Leave room</button></div>' +
+      '</div>' +
       '<p class="muted small center">Battle is cosmetics only. Equipment from Adventure never applies here.</p>';
   };
-  screens.battle.bind = function () {
-    // Quick match starts the computer opponent at once. The matchmaking wait returns with the online server.
-    $('#quick').addEventListener('click', function () { go('#/battle/quick'); });
-    function online() { $('#online').hidden = false; $('#online').scrollIntoView({ behavior: 'smooth' }); }
-    $('#room').addEventListener('click', online);
-    $('#join').addEventListener('click', function () { var v = $('#code').value.trim(); if (!/^[A-Za-z0-9]{6}$/.test(v)) return showErr('code', 'A room code is 6 letters and numbers, like 7K3PX9.'); showErr('code', ''); online(); });
-    $('#online-ok').addEventListener('click', function () { $('#online').hidden = true; });
+  screens.battle.bind = function (p) {
+    var Net = root.Net, u = B.user(), t = null, el = 0, me = null, joinCode = p && p[0] ? p[0].toUpperCase() : null;
+    function show(id) { ['idle', 'searching', 'nomatch', 'room-view'].forEach(function (k) { var e = $('#' + k); if (e) e.hidden = k !== id; }); }
+    if (!onlineAvailable()) { $('#quick').addEventListener('click', function () { go('#/battle/quick'); }); return; }
+    function connect() { return Net.connect().catch(function (err) { toast(err.message, 'warn'); show('idle'); throw err; }); }
+    function stopTimer() { clearInterval(t); t = null; }
+    Net.off();
+    Net.on('hello', function (m) { me = m.you; });
+    Net.on('queued', function () { show('searching'); el = 0; stopTimer(); t = setInterval(function () { el++; var e = $('#search-txt'); if (e) e.textContent = fmtTime(el) + ' · rating ' + (u.rating || 1000); }, 1000); });
+    Net.on('nomatch', function () { stopTimer(); show('nomatch'); });
+    Net.on('idle', function () { stopTimer(); show('idle'); });
+    Net.on('error', function (m) { toast(m.msg || 'Something went wrong.', 'warn'); });
+    Net.on('room', function (m) {
+      show('room-view');
+      $('#room-code').textContent = m.code.slice(0, 3) + ' ' + m.code.slice(3);
+      var mine = me ? m.players.filter(function (x) { return x.id === me.id; })[0] : null;
+      $('#room-players').innerHTML = '<div class="card list">' + m.players.map(function (x) { return '<div class="row"><span><span>' + esc(x.name) + (x.host ? ' · host' : '') + '</span><small class="muted">' + (x.rating || 1000) + ' rating' + (x.connected ? '' : ' · reconnecting') + '</small></span><span class="' + (x.ready ? 'good' : 'muted') + '">' + (x.ready ? 'Ready' : 'Not ready') + '</span></div>'; }).join('') +
+        (m.players.length < 2 ? '<div class="row"><span class="muted">Waiting for a second player</span></div>' : '') + '</div>';
+      var rb = $('#ready'); rb.textContent = mine && mine.ready ? 'Not ready' : 'Ready'; rb.className = 'btn ' + (mine && mine.ready ? 'btn-secondary' : 'btn-primary');
+      var sb = $('#start-room'); sb.hidden = !(mine && mine.host); sb.disabled = !(m.players.length === 2 && m.players.every(function (x) { return x.ready; }));
+      sb.className = 'btn ' + (sb.disabled ? 'btn-wait' : 'btn-primary');
+      joinCode = m.code;
+    });
+    Net.on('start', function (m) { stopTimer(); root.__onlineMatch = m.match; go('#/battle/online'); });
+    $('#quick').addEventListener('click', function () { show('searching'); connect().then(function () { Net.send({ t: 'queue' }); }).catch(function () {}); });
+    $('#cancel').addEventListener('click', function () { Net.send({ t: 'cancel' }); stopTimer(); show('idle'); });
+    $('#wait-more').addEventListener('click', function () { Net.send({ t: 'queue' }); });
+    $('#nomatch-back').addEventListener('click', function () { show('idle'); });
+    $('#room').addEventListener('click', function () { connect().then(function () { Net.send({ t: 'create' }); }).catch(function () {}); });
+    $('#join').addEventListener('click', function () {
+      var v = $('#code').value.trim().toUpperCase();
+      if (!/^[A-Z0-9]{6}$/.test(v)) return showErr('code', 'A room code is 6 letters and numbers, like 7K3PX9.');
+      showErr('code', ''); connect().then(function () { Net.send({ t: 'join', code: v }); }).catch(function () {});
+    });
+    $('#ready').addEventListener('click', function () { Net.send({ t: 'ready', on: $('#ready').textContent === 'Ready' }); });
+    $('#start-room').addEventListener('click', function () { Net.send({ t: 'start' }); });
+    $('#leave').addEventListener('click', function () { Net.send({ t: 'leave' }); show('idle'); });
+    function copy(text, label) { if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(function () { toast(label + ' copied'); }, function () { toast(text); }); else toast(text); }
+    $('#copy-code').addEventListener('click', function () { if (joinCode) copy(joinCode, 'Code'); });
+    $('#copy-link').addEventListener('click', function () { if (joinCode) copy(location.origin + location.pathname + '#/battle/join/' + joinCode, 'Link'); });
+    if (joinCode) { $('#code').value = joinCode; connect().then(function () { Net.send({ t: 'join', code: joinCode }); }).catch(function () {}); }
+  };
+  screens.battleonline = function () { return '<div id="game"></div>'; };
+  screens.battleonline.bind = function () {
+    var match = root.__onlineMatch;
+    if (!match || !onlineAvailable()) { toast('No match in progress.', 'warn'); return go('#/battle'); }
+    root.Net.off();
+    current = root.Play.start($('#game'), { mode: 'online', match: match, onExit: function () { root.__onlineMatch = null; go('#/battle'); } });
   };
 
   // ---- router ---------------------------------------------------------------------
@@ -431,7 +480,7 @@
     [/^\/shop(?:\/(themes|extras|coins|equipment))?$/, 'shop'], [/^\/checkout\/([^/]+)(?:\/(approve))?$/, 'checkout'], [/^\/pay\/return\/([^/]+)$/, 'payreturn'],
     [/^\/settings$/, 'settings'], [/^\/settings\/email$/, 'settingsemail'], [/^\/settings\/password$/, 'settingspassword'],
     [/^\/history(?:\/(all|classic|adventure|battle))?$/, 'history'],
-    [/^\/battle$/, 'battle'], [/^\/battle\/quick$/, 'battlequick'], [/^\/battle\/local$/, 'battlelocal']
+    [/^\/battle$/, 'battle'], [/^\/battle\/join\/([A-Za-z0-9]{6})$/, 'battle'], [/^\/battle\/quick$/, 'battlequick'], [/^\/battle\/local$/, 'battlelocal'], [/^\/battle\/online$/, 'battleonline']
   ];
 
   function render() {
@@ -441,7 +490,8 @@
     for (var i = 0; i < routes.length; i++) { var m = path.match(routes[i][0]); if (m) { name = routes[i][1]; params = m.slice(1); break; } }
     if (!name) { go('#/'); return; }
     var scr = screens[name];
-    var fullBleed = name === 'play' || name === 'battlequick' || name === 'battlelocal';
+    var fullBleed = name === 'play' || name === 'battlequick' || name === 'battlelocal' || name === 'battleonline';
+    if (name !== 'battle' && name !== 'battleonline' && root.Net && root.Net.connected()) { root.Net.off(); root.Net.close(); }
     app.className = 'app ' + (fullBleed ? 'full' : 'shell') + (name === 'main' ? ' is-main' : '');
     app.innerHTML = scr(params);
     if (scr.bind) scr.bind(params);

@@ -44,12 +44,16 @@ app.get('/env.js', (req, res) => {
   res.send('window.APP_ENV=' + JSON.stringify({ mode: 'server', provider: PAY, emailProvider: EMAIL, gameName: process.env.GAME_NAME || null }) + ';');
 });
 
+let realtime = null;
+app.get('/api/online', (req, res) => res.json(realtime ? realtime.stats() : {}));
 app.use('/api', api);
 app.use(express.static(root, { index: 'index.html', extensions: ['html'], setHeaders(res, p) { if (/\.(js|css)$/.test(p)) res.setHeader('Cache-Control', 'public, max-age=300'); } }));
 app.get('*', (req, res) => res.sendFile(path.join(root, 'index.html')));
 
 const port = parseInt(process.env.PORT || '3000', 10);
-app.listen(port, () => {
+const server = require('http').createServer(app);
+realtime = require('./realtime').attach(server, { insertRun: api.insertRun });
+server.listen(port, () => {
   console.log(`tetris.io server on http://localhost:${port}  payments=${PAY}  email=${EMAIL}${ORIGINS.length ? '  cors=' + ORIGINS.join(',') : ''}`);
   if (PAY === 'mock') console.log('Payments are simulated. Set PAYMENT_PROVIDER=chip and the CHIP keys for real payments.');
   if (EMAIL === 'console') console.log('Emails are printed here and shown in the Test inbox. Set EMAIL_PROVIDER=resend and RESEND_API_KEY for real email.');

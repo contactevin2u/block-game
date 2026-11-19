@@ -101,6 +101,7 @@ label { font-size: 13px; font-weight: 600; letter-spacing: .06em; text-transform
 .ring.good { border-color: var(--good); color: var(--good); }
 .ring.spin { animation: spin 1.2s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
+.room-code { display: block; font-family: var(--font-display); font-size: 40px; letter-spacing: .18em; color: var(--accent); line-height: 1; margin: 6px 0 10px; }
 .dots { display: flex; gap: 6px; justify-content: center; } .dots i { width: 14px; height: 14px; border-radius: 3px; background: var(--accent-bg); animation: pulse 1s infinite; } .dots i:nth-child(2) { animation-delay: .2s; } .dots i:nth-child(3) { animation-delay: .4s; }
 @keyframes pulse { 50% { opacity: .3; } }
 @media (prefers-reduced-motion: reduce) { .ring.spin, .dots i { animation: none; } }

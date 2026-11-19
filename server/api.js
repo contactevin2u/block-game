@@ -46,6 +46,15 @@ function notFoundOrOk(res) { return res.json({ ok: true }); }
 r.get('/health', (req, res) => res.json({ ok: true, provider: PAY_PROVIDER, email: email.PROVIDER }));
 r.get('/me', (req, res) => res.json(meResponse(req)));
 
+// Online battle: a short-lived token to open the WebSocket with (the socket cannot use the HTTP cookie across sites).
+const realtime = require('./realtime');
+r.post('/ws-token', (req, res) => {
+  const u = req.user;
+  const token = realtime.issueToken(u ? { id: u.id, email: u.email, rating: u.rating, guest: false } : { guest: true });
+  const wsUrl = (process.env.WS_URL || apiUrl(req).replace(/^http/, 'ws') + '/ws');
+  res.json({ token, wsUrl });
+});
+
 r.patch('/me', needUser, (req, res) => {
   const b = req.body || {}, u = req.user;
   const settings = b.settings && typeof b.settings === 'object' ? JSON.stringify(Object.assign(j(u.settings, {}), b.settings)) : u.settings;
@@ -296,4 +305,5 @@ r.get('/dev/emails', (req, res) => { if (email.PROVIDER !== 'console') return ba
 
 r.use((err, req, res, next) => { console.error(err); res.status(500).json({ error: 'Something went wrong on the server.' }); });
 
+r.insertRun = insertRun;
 module.exports = r;
