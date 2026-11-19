@@ -71,6 +71,11 @@ label { font-size: 13px; font-weight: 600; letter-spacing: .06em; text-transform
 .card.list > .row:last-child { border-bottom: 0; }
 .card.list > .row.danger { color: var(--danger); }
 .row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+/* Shop item cards: text left, action right; the action drops below at phone width. */
+.card.row { flex-direction: row; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 16px; text-align: left; }
+.card.row > div { flex: 1 1 220px; min-width: 0; }
+.card.row > .btn { flex: 0 0 auto; }
+@media (max-width: 480px) { .card.row > .btn { width: 100%; } }
 .row > span > small { display: block; font-size: 13px; }
 .row.gap { gap: 8px; }
 .notice { background: var(--surface); border: 1px solid var(--line); border-left: 4px solid var(--accent-bg); border-radius: 8px; padding: 14px 16px; display: flex; flex-direction: column; gap: 4px; }
