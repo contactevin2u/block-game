@@ -386,6 +386,9 @@
       }).join('') : '<p class="muted">No runs yet. Play a game and it will show up here.</p>';
       $('#run-count').textContent = allRuns.length;
       $('#top-score').textContent = topScore.toLocaleString();
+      // Remember the corrected numbers so the next render shows them at once instead of flashing the old value.
+      if (topScore > (u.bestScore || 0)) { u.bestScore = topScore; B.persist(); }
+      if (allRuns.length > (u.gamesPlayed || 0)) u.gamesPlayed = allRuns.length;
       $('#csv').hidden = !allRuns.length;
     });
     var b = $('#csv'); if (!b) return;
