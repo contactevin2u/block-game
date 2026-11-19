@@ -53,16 +53,16 @@
   };
 
   Input.prototype.press = function (a) {
-    var g = this.game;
+    var g = this.game, A = root.Audio, ok = false;
     this.pressed[a] = true;
     switch (a) {
-      case 'left': this.dir = -1; this.dasTimer = 0; this.charged = false; g.moveLeft(); break;
-      case 'right': this.dir = 1; this.dasTimer = 0; this.charged = false; g.moveRight(); break;
+      case 'left': this.dir = -1; this.dasTimer = 0; this.charged = false; ok = g.moveLeft(); if (ok && A) A.sfx('move'); break;
+      case 'right': this.dir = 1; this.dasTimer = 0; this.charged = false; ok = g.moveRight(); if (ok && A) A.sfx('move'); break;
       case 'soft': g.setSoftDrop(true); break;
-      case 'hard': g.hardDrop(); break;
-      case 'cw': g.rotateCW(); break;
-      case 'ccw': g.rotateCCW(); break;
-      case 'hold': g.holdPiece(); break;
+      case 'hard': ok = g.hardDrop(); if (ok && A) A.sfx('drop'); break;
+      case 'cw': ok = g.rotateCW(); if (ok && A) A.sfx('rotate'); break;
+      case 'ccw': ok = g.rotateCCW(); if (ok && A) A.sfx('rotate'); break;
+      case 'hold': ok = g.holdPiece(); if (ok && A) A.sfx('hold'); break;
       case 'pause': this.onPause(); break;
     }
   };

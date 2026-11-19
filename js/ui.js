@@ -287,7 +287,9 @@
       '<p class="eyebrow">Game</p><div class="card list">' +
       '<label class="row"><span>Game theme</span><select class="select" id="theme">' + owned.map(function (th) { return '<option value="' + th.id + '"' + (u.settings.theme === th.id ? ' selected' : '') + '>' + esc(th.name) + '</option>'; }).join('') + '</select></label>' +
       '<label class="row"><span>Ghost piece</span><input type="checkbox" id="ghost"' + (u.settings.ghost !== false ? ' checked' : '') + '></label>' +
-      '<label class="row"><span>Sound</span><input type="checkbox" id="sound"' + (u.settings.sound !== false ? ' checked' : '') + '></label></div>' +
+      '<label class="row"><span>Music</span><input type="checkbox" id="music"' + (u.settings.music !== false ? ' checked' : '') + '></label>' +
+      '<label class="row"><span>Sound effects</span><input type="checkbox" id="sfx"' + (u.settings.sfx !== false ? ' checked' : '') + '></label>' +
+      '<label class="row"><span>Volume</span><input type="range" id="volume" min="0" max="100" value="' + Math.round((typeof u.settings.volume === 'number' ? u.settings.volume : 0.7) * 100) + '" style="width:45%"></label></div>' +
       '<p class="eyebrow">Account</p><div class="card list">' +
       (guest ? '<p class="muted">You are playing as a guest. <a class="link" href="#/create">Create an account</a> to change email or password.</p>' :
         '<a class="row" href="#/settings/email"><span><span>Email</span><small class="muted">' + esc(u.email) + '</small></span><span class="link">Change &#8250;</span></a>' +
@@ -303,7 +305,11 @@
     $$('[data-ap]').forEach(function (b) { b.addEventListener('click', function () { u.settings.appearance = b.getAttribute('data-ap'); B.persist(); applyAppearance(u.settings.appearance); $$('[data-ap]').forEach(function (x) { x.classList.toggle('on', x === b); x.setAttribute('aria-pressed', x === b); }); note(); }); });
     $('#theme').addEventListener('change', function () { u.settings.theme = this.value; B.persist(); toast(T.byId(this.value).name + ' selected'); });
     $('#ghost').addEventListener('change', function () { u.settings.ghost = this.checked; B.persist(); });
-    $('#sound').addEventListener('change', function () { u.settings.sound = this.checked; B.persist(); });
+    function audio() { u.settings.sound = true; if (root.Audio) root.Audio.apply(u.settings); B.persist(); }
+    $('#music').addEventListener('change', function () { u.settings.music = this.checked; audio(); });
+    $('#sfx').addEventListener('change', function () { u.settings.sfx = this.checked; audio(); if (this.checked && root.Audio) root.Audio.preview(); });
+    $('#volume').addEventListener('input', function () { u.settings.volume = this.value / 100; audio(); });
+    $('#volume').addEventListener('change', function () { if (root.Audio) root.Audio.preview(); });
     var lo = $('[data-logout]'); if (lo) lo.addEventListener('click', function () { B.logout(); toast('Logged out'); go('#/'); });
     var la = $('[data-logout-all]'); if (la) la.addEventListener('click', function () { B.logoutAll(); toast('Logged out everywhere'); go('#/'); });
     var wipe = $('[data-wipe]'); if (wipe) wipe.addEventListener('click', function () { if (this.dataset.armed) { B.wipe(); applyAppearance('system'); toast('Test data cleared'); go('#/'); } else { this.dataset.armed = '1'; this.querySelector('span').textContent = 'Tap again to confirm. This deletes all test accounts.'; } });

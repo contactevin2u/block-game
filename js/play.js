@@ -2,6 +2,7 @@
 (function (root) {
   'use strict';
   var C = root.CONFIG, E = root.Engine, T = root.Themes, R = root.Renderer, B = root.Backend, S = root.Store, A = root.Adventure;
+  function sfx(name) { if (root.Audio) root.Audio.sfx(name); }
 
   function esc(s) { return String(s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
   function fmtTime(t) { t = Math.floor(t); var m = Math.floor(t / 60), s = t % 60; return m + ':' + (s < 10 ? '0' : '') + s; }
@@ -50,6 +51,7 @@
     this.coinsEarned = 0; this.usedEquipment = false; this.slowTimer = 0;
     this.lastHud = 0;
     this.build();
+    if (root.Audio) { root.Audio.apply(this.user.settings); root.Audio.startMusic(); }
     this.start();
   }
 
@@ -162,10 +164,11 @@
     var self = this, n = 3;
     this.paused = true;
     this.setOverlay('<div class="count">' + n + '</div>');
+    sfx('tick');
     var t = setInterval(function () {
       n--;
-      if (n > 0) self.setOverlay('<div class="count">' + n + '</div>');
-      else { clearInterval(t); self.hideOverlay(); self.paused = false; self.last = performance.now(); }
+      if (n > 0) { self.setOverlay('<div class="count">' + n + '</div>'); sfx('tick'); }
+      else { clearInterval(t); self.hideOverlay(); self.paused = false; self.last = performance.now(); sfx('start'); }
     }, 700);
   };
 
@@ -233,6 +236,7 @@
     var m = this.mode;
     switch (ev.type) {
       case 'clear':
+        if (p.idx === 0 || m === 'local') sfx(/T-spin/.test(ev.label) ? 'tspin' : 'clear' + ev.lines);
         var txt = ev.label + (ev.b2b ? ' · B2B' : '') + (ev.combo > 0 ? ' · ' + ev.combo + ' combo' : '');
         this.popup(p, txt, ev.lines === 4 || ev.perfect || /T-spin/.test(ev.label) ? 'big' : '');
         if (p.idx === 0 && (m === 'classic' || m === 'adventure')) this.coinsEarned += ev.lines * C.COINS_PER_LINE;
@@ -242,12 +246,13 @@
           if (remaining > 0 && !other.out) { other.game.receiveGarbage(remaining); p.game.stats.attackSent += remaining; }
         }
         break;
-      case 'tspin': this.popup(p, (ev.kind === 'mini' ? 'Mini ' : '') + 'T-spin'); break;
-      case 'level': this.popup(p, 'Level ' + ev.level, 'big'); break;
-      case 'garbage': p.renderer.flash = 1; break;
-      case 'shield': this.popup(p, 'Shield used', 'big'); break;
-      case 'bomb': this.popup(p, 'Line Bomb'); break;
-      case 'gameover': this.onGameOver(p, ev.reason); break;
+      case 'lock': if (p.idx === 0 || m === 'local') sfx('lock'); break;
+      case 'tspin': this.popup(p, (ev.kind === 'mini' ? 'Mini ' : '') + 'T-spin'); if (p.idx === 0) sfx('tspin'); break;
+      case 'level': this.popup(p, 'Level ' + ev.level, 'big'); sfx('level'); break;
+      case 'garbage': p.renderer.flash = 1; if (p.idx === 0 || m === 'local') sfx('garbage'); break;
+      case 'shield': this.popup(p, 'Shield used', 'big'); sfx('shield'); break;
+      case 'bomb': this.popup(p, 'Line Bomb'); sfx('clear2'); break;
+      case 'gameover': if (p.idx === 0 || m === 'local') sfx('over'); this.onGameOver(p, ev.reason); break;
     }
   };
 
@@ -329,6 +334,7 @@
 
   GameScreen.prototype.stageComplete = function () {
     this.finished = true;
+    sfx('win');
     var g = this.players[0].game, st = this.stage;
     var res = A.complete(this.user, st, { score: Math.floor(g.score), usedEquipment: this.usedEquipment, continued: g.continues > 0 });
     this.stageCoins = res.coins;
@@ -350,6 +356,7 @@
     var html;
     if (m === 'battle') {
       var won = winnerIdx === 0, delta = won ? 12 + Math.round(Math.random() * 6) : -(10 + Math.round(Math.random() * 6));
+      sfx(won ? 'win' : 'over');
       this.user.rating = (this.user.rating || 1000) + delta; this.user.battles[won ? 'w' : 'l']++; B.persist();
       B.saveRun({ mode: 'battle', score: Math.floor(g.score), lines: g.lines, level: g.level, time: Math.floor(g.time), result: won ? 'win' : 'loss', opponent: this.opponent.name, ratingDelta: delta, attackSent: g.stats.attackSent, theme: this.theme.id });
       html = '<div class="panel over"><div class="panel-head"><p class="eyebrow ' + (won ? 'good' : 'danger') + '">' + (won ? 'Victory' : 'Defeat') + '</p><h2>' + (won ? 'You win' : esc(this.opponent.name) + ' wins') + '</h2></div>' +
@@ -421,6 +428,7 @@
   };
   GameScreen.prototype.togglePause = function () {
     if (this.finished || this.ended || !this.running) return;
+    if (root.Audio) root.Audio.duck(!this.paused);
     if (!this.paused) {
       this.paused = true;
       this.players.forEach(function (p) { p.game.setSoftDrop(false); });
@@ -445,6 +453,7 @@
   GameScreen.prototype.exit = function () { this.destroy(); if (this.opts.onExit) this.opts.onExit(); else location.hash = '#/lobby'; };
   GameScreen.prototype.destroy = function () {
     this.running = false; cancelAnimationFrame(this.raf);
+    if (root.Audio) root.Audio.stopMusic();
     this.teardownPlayers();
     window.removeEventListener('resize', this.onResize);
     document.removeEventListener('visibilitychange', this.onVis);
