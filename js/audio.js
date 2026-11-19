@@ -140,7 +140,7 @@
   // The browser refuses play() before the first gesture; retry on the next one.
   ['pointerdown', 'keydown', 'touchstart'].forEach(function (ev) { root.addEventListener(ev, function () { if (song.wanted && song.el && song.el.paused && !song.failed) playSong(); }, { passive: true }); });
 
-  var Audio = {
+  var GameAudio = {
     apply: function (s) {
       settings.music = s.music !== false && s.sound !== false;
       settings.sfx = s.sfx !== false && s.sound !== false;
@@ -163,5 +163,5 @@
     sfx: function (name) { if (!settings.sfx || !unlocked || !ensure() || !SFX[name]) return; try { SFX[name](ctx.currentTime); } catch (e) {} },
     preview: function () { unlock(); this.sfx('clear4'); }
   };
-  root.Audio = Audio;
+  root.GameAudio = GameAudio;
 })(window);

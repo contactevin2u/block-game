@@ -53,7 +53,7 @@
   };
 
   Input.prototype.press = function (a) {
-    var g = this.game, A = root.Audio, ok = false;
+    var g = this.game, A = root.GameAudio, ok = false;
     this.pressed[a] = true;
     switch (a) {
       case 'left': this.dir = -1; this.dasTimer = 0; this.charged = false; ok = g.moveLeft(); if (ok && A) A.sfx('move'); break;

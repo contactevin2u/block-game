@@ -2,7 +2,7 @@
 (function (root) {
   'use strict';
   var C = root.CONFIG, E = root.Engine, T = root.Themes, R = root.Renderer, B = root.Backend, S = root.Store, A = root.Adventure;
-  function sfx(name) { if (root.Audio) root.Audio.sfx(name); }
+  function sfx(name) { if (root.GameAudio) root.GameAudio.sfx(name); }
 
   function esc(s) { return String(s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
   function fmtTime(t) { t = Math.floor(t); var m = Math.floor(t / 60), s = t % 60; return m + ':' + (s < 10 ? '0' : '') + s; }
@@ -51,7 +51,7 @@
     this.coinsEarned = 0; this.usedEquipment = false; this.slowTimer = 0;
     this.lastHud = 0;
     this.build();
-    if (root.Audio) { root.Audio.apply(this.user.settings); root.Audio.startMusic(); }
+    if (root.GameAudio) { root.GameAudio.apply(this.user.settings); root.GameAudio.startMusic(); }
     this.start();
   }
 
@@ -90,7 +90,7 @@
     this.el.querySelector('[data-do="pause"]').addEventListener('click', function () { self.togglePause(); });
     // The logo opens the pause menu (which has Quit to lobby) instead of leaving mid-run on a stray tap.
     this.el.querySelector('[data-do="home"]').addEventListener('click', function () { if (self.ended || self.finished) self.exit(); else if (!self.paused) self.togglePause(); });
-    this.el.querySelector('[data-do="track"]').addEventListener('click', function () { if (root.Audio) { root.Audio.nextTrack(); self.updateNowPlaying(); } });
+    this.el.querySelector('[data-do="track"]').addEventListener('click', function () { if (root.GameAudio) { root.GameAudio.nextTrack(); self.updateNowPlaying(); } });
     this.nowPlayingTimer = setInterval(function () { self.updateNowPlaying(); }, 2000);
     if (m === 'adventure') {
       Array.prototype.forEach.call(this.el.querySelectorAll('[data-equip]'), function (btn) { btn.addEventListener('click', function () { self.useEquipment(btn.getAttribute('data-equip')); }); });
@@ -104,7 +104,7 @@
 
   GameScreen.prototype.updateNowPlaying = function () {
     var el = this.el.querySelector('.now-playing'); if (!el) return;
-    var t = root.Audio && root.Audio.nowPlaying();
+    var t = root.GameAudio && root.GameAudio.nowPlaying();
     var txt = t && this.user.settings.music !== false ? t.title + ' · ' + t.artist : this.theme.name;
     if (el.textContent !== txt) el.textContent = txt;
   };
@@ -439,7 +439,7 @@
   };
   GameScreen.prototype.togglePause = function () {
     if (this.finished || this.ended || !this.running) return;
-    if (root.Audio) root.Audio.duck(!this.paused);
+    if (root.GameAudio) root.GameAudio.duck(!this.paused);
     if (!this.paused) {
       this.paused = true;
       this.players.forEach(function (p) { p.game.setSoftDrop(false); });
@@ -465,7 +465,7 @@
   GameScreen.prototype.destroy = function () {
     this.running = false; cancelAnimationFrame(this.raf);
     clearInterval(this.nowPlayingTimer);
-    if (root.Audio) root.Audio.stopMusic();
+    if (root.GameAudio) root.GameAudio.stopMusic();
     this.teardownPlayers();
     window.removeEventListener('resize', this.onResize);
     document.removeEventListener('visibilitychange', this.onVis);

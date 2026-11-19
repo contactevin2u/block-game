@@ -315,11 +315,11 @@
     $$('[data-ap]').forEach(function (b) { b.addEventListener('click', function () { u.settings.appearance = b.getAttribute('data-ap'); B.persist(); applyAppearance(u.settings.appearance); $$('[data-ap]').forEach(function (x) { x.classList.toggle('on', x === b); x.setAttribute('aria-pressed', x === b); }); note(); }); });
     $('#theme').addEventListener('change', function () { u.settings.theme = this.value; B.persist(); toast(T.byId(this.value).name + ' selected'); });
     $('#ghost').addEventListener('change', function () { u.settings.ghost = this.checked; B.persist(); });
-    function audio() { u.settings.sound = true; if (root.Audio) root.Audio.apply(u.settings); B.persist(); }
+    function audio() { u.settings.sound = true; if (root.GameAudio) root.GameAudio.apply(u.settings); B.persist(); }
     $('#music').addEventListener('change', function () { u.settings.music = this.checked; audio(); });
-    $('#sfx').addEventListener('change', function () { u.settings.sfx = this.checked; audio(); if (this.checked && root.Audio) root.Audio.preview(); });
+    $('#sfx').addEventListener('change', function () { u.settings.sfx = this.checked; audio(); if (this.checked && root.GameAudio) root.GameAudio.preview(); });
     $('#volume').addEventListener('input', function () { u.settings.volume = this.value / 100; audio(); });
-    $('#volume').addEventListener('change', function () { if (root.Audio) root.Audio.preview(); });
+    $('#volume').addEventListener('change', function () { if (root.GameAudio) root.GameAudio.preview(); });
     var lo = $('[data-logout]'); if (lo) lo.addEventListener('click', function () { B.logout(); toast('Logged out'); go('#/'); });
     var la = $('[data-logout-all]'); if (la) la.addEventListener('click', function () { B.logoutAll(); toast('Logged out everywhere'); go('#/'); });
     var wipe = $('[data-wipe]'); if (wipe) wipe.addEventListener('click', function () { if (this.dataset.armed) { B.wipe(); applyAppearance('system'); toast('Test data cleared'); go('#/'); } else { this.dataset.armed = '1'; this.querySelector('span').textContent = 'Tap again to confirm. This deletes all test accounts.'; } });
