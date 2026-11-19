@@ -40,7 +40,8 @@
   function showErr(id, msg) { var e = $('[data-err="' + id + '"]'); if (e) e.textContent = msg || ''; var i = $('#' + id); if (i) i.classList.toggle('bad', !!msg); }
   function validEmail(v) { return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v); }
   function passToggle() { $$('[data-toggle-pass]').forEach(function (b) { b.addEventListener('click', function () { var inp = $('#' + b.getAttribute('data-toggle-pass')); inp.type = inp.type === 'password' ? 'text' : 'password'; b.textContent = inp.type === 'password' ? 'Show' : 'Hide'; }); }); }
-  function inboxLink() { return '<p class="muted small center">Test build: emails appear in the <a href="#/inbox">Test inbox</a>.</p>'; }
+  function inboxLink() { return testTools() ? '<p class="muted small center">Email is in test mode: messages appear in the <a href="#/inbox">Test inbox</a>.</p>' : ''; }
+  function paymentsMock() { return isLocal() || !root.APP_ENV || root.APP_ENV.provider !== 'chip'; }
 
   // ---- screens ------------------------------------------------------------------
   var screens = {};
@@ -217,7 +218,7 @@
       body = '<p class="muted">You have <b class="accent">' + u.coins.toLocaleString() + '</b> coins. Equipment works in Adventure only.</p>' + C.EQUIPMENT.map(function (e) { return '<div class="card row"><div><b>' + esc(e.name) + '</b> <span class="muted small">× ' + (u.inventory[e.id] || 0) + '</span><p class="muted small">' + esc(e.desc) + '</p></div><button type="button" class="btn btn-secondary slim" data-equip-buy="' + e.id + '">' + e.cost + ' coins</button></div>'; }).join('');
     }
     return header('#/lobby', 'Lobby', '<span class="muted small">Coins <b class="accent">' + u.coins.toLocaleString() + '</b></span>') + '<h1>Shop</h1><div class="chips">' + tabs + '</div>' + body +
-      '<p class="muted small center">Test build: payments go through a simulated gateway. No money moves.</p>';
+      (paymentsMock() ? '<p class="muted small center">Payments are in test mode: the checkout is simulated and no money moves.</p>' : '');
   };
   screens.shop.bind = function (p) {
     $$('.sample').forEach(function (cv) { R.drawSample(cv, T.byId(cv.getAttribute('data-theme-id')), 120); });
@@ -391,9 +392,9 @@
     var u = B.user(), rating = u.rating || 1000;
     var rank = rating < 900 ? 'Bronze' : rating < 1100 ? 'Silver' : rating < 1300 ? 'Gold' : rating < 1500 ? 'Platinum' : 'Diamond';
     return header('#/lobby', 'Lobby') + '<h1>Battle</h1>' +
-      '<div class="card row"><div><b>' + rank + '</b><p class="muted small">' + rating.toLocaleString() + ' rating · ' + u.battles.w + ' W ' + u.battles.l + ' L</p></div><span class="good small">Test build</span></div>' +
+      '<div class="card row"><div><b>' + rank + '</b><p class="muted small">' + rating.toLocaleString() + ' rating · ' + u.battles.w + ' W ' + u.battles.l + ' L</p></div></div>' +
       '<div id="idle">' +
-      '<button type="button" class="btn btn-primary stack" id="quick">Quick match<small>1 v 1 ranked · against the computer in this build</small></button>' +
+      '<button type="button" class="btn btn-primary stack" id="quick">Quick match<small>1 v 1 ranked · computer opponent, online players coming soon</small></button>' +
       '<button type="button" class="btn btn-secondary stack" id="room">Create a room<small>Invite friends with a code or link</small></button>' +
       '<div class="field"><label for="code">Join a friend\'s room</label><div class="row gap"><input class="input code" id="code" maxlength="6" placeholder="Room code" autocomplete="off"><button type="button" class="btn btn-secondary slim" id="join">Join</button></div><p class="err" data-err="code"></p></div>' +
       (canLocal() ? '<a class="btn btn-secondary stack" href="#/battle/local">Local 2-player<small>Two players on this keyboard</small></a>' : '<p class="muted small center">Local 2-player needs a PC with a keyboard.</p>') +
