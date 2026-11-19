@@ -63,7 +63,7 @@ function callback(order, over) {
 (async () => {
   await new Promise((r) => fake.listen(0, '127.0.0.1', r));
   const fakeBase = 'http://127.0.0.1:' + fake.address().port;
-  const ipayEnv = { PAYMENT_PROVIDER: 'ipay88', IPAY88_MERCHANT_CODE: CODE, IPAY88_MERCHANT_KEY: KEY, IPAY88_ENTRY_URL: fakeBase + '/entry', IPAY88_REQUERY_URL: fakeBase + '/enquiry', PAYMENTS_ENABLED: 'true', PENDING_AGE_MS: '1500', RECHECK_INTERVAL_MS: '1000', PENDING_EXPIRE_MS: '60000' };
+  const ipayEnv = { GAME_NAME: 'Remarkable', PAYMENT_PROVIDER: 'ipay88', IPAY88_MERCHANT_CODE: CODE, IPAY88_MERCHANT_KEY: KEY, IPAY88_ENTRY_URL: fakeBase + '/entry', IPAY88_REQUERY_URL: fakeBase + '/enquiry', PAYMENTS_ENABLED: 'true', PENDING_AGE_MS: '1500', RECHECK_INTERVAL_MS: '1000', PENDING_EXPIRE_MS: '60000' };
 
   // ---- production guards ----
   let s = startServer({ RENDER: 'true', PAYMENT_PROVIDER: 'mock' });
@@ -153,6 +153,25 @@ function callback(order, over) {
   const me = (await call('GET', '/me')).d.user;
   const lostNow = (await call('GET', '/orders/' + lost.id)).d.order;
   check('PENDING order older than the age limit is settled by the job', lostNow.status === 'paid' && me.coins === coinsBefore + 1000);
+
+  // Remark carries the game name from config, not a fixed string
+  r = await call('POST', '/orders', { type: 'theme', id: 'paper' });
+  r = await call('GET', '/payments/ipay88/start/' + r.d.order.id);
+  check('Remark uses GAME_NAME', r.text.includes('name="Remark" value="Remarkable order ord_'));
+  s.stop();
+
+  // ---- expiry: one last status check before an order is marked expired ----
+  s = startServer(Object.assign({}, ipayEnv, { PENDING_AGE_MS: '1000', RECHECK_INTERVAL_MS: '800', PENDING_EXPIRE_MS: '2500' }));
+  check('server up for expiry test', await waitUp(s));
+  call = client(s);
+  await call('POST', '/auth/signup', { email: 'late@example.com', password: 'password1' });
+  const latePaid = (await call('POST', '/orders', { type: 'theme', id: 'glass' })).d.order;
+  const lateUnpaid = (await call('POST', '/orders', { type: 'theme', id: 'lcd' })).d.order;
+  paidOrders.add(latePaid.id); // paid at the bank, but every callback was lost
+  await sleep(4500);
+  const a = (await call('GET', '/orders/' + latePaid.id)).d, b = (await call('GET', '/orders/' + lateUnpaid.id)).d;
+  check('old order confirmed on the final check is granted, not expired', a.order.status === 'paid' && a.user.purchases.themes.includes('glass'));
+  check('old order still unconfirmed is expired with no item', b.order.status === 'expired' && !b.user.purchases.themes.includes('lcd'));
 
   s.stop(); fake.close();
   console.log(fails ? fails + ' FAILED' : 'ALL PASSED');

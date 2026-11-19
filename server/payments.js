@@ -1,6 +1,8 @@
 /* Payment providers. PAYMENT_PROVIDER=chip uses CHIP (chip-in.asia) hosted checkout; =mock simulates it.
    Both expose: createCheckout(order, ctx) -> { checkoutUrl, providerRef } and verify(order) -> 'paid' | 'pending' | 'failed'. */
 'use strict';
+global.window = global.window || {}; require('../js/config.js');
+const GAME_NAME = process.env.GAME_NAME || global.window.CONFIG.GAME_NAME;
 
 // Production is any Render service (RENDER=true) or NODE_ENV=production. There, mock may never run and a real
 // provider refuses to start without its keys. Unset in production means 'none': the server runs, purchases are closed.
@@ -83,7 +85,7 @@ const ipay88 = {
   startForm(order, ctx) {
     const fields = {
       MerchantCode: this.code(), PaymentId: '', RefNo: order.id, Amount: this.amount(order.price_cents), Currency: 'MYR',
-      ProdDesc: order.name, UserName: ctx.email.split('@')[0].slice(0, 100), UserEmail: ctx.email, UserContact: '-', Remark: 'tetris.io order ' + order.id,
+      ProdDesc: order.name, UserName: ctx.email.split('@')[0].slice(0, 100), UserEmail: ctx.email, UserContact: '-', Remark: (GAME_NAME + ' order ' + order.id).slice(0, 100),
       Lang: 'UTF-8', SignatureType: this.algo.toUpperCase(), Signature: this.requestSignature(order),
       ResponseURL: ctx.baseUrl + '/api/payments/ipay88/response', BackendURL: ctx.apiUrl + '/api/payments/ipay88/backend'
     };

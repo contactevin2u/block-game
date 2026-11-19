@@ -254,7 +254,12 @@ async function recheckPending() {
   const now = Date.now();
   const list = all("SELECT * FROM orders WHERE status IN ('pending','processing') AND created_at < ? AND created_at > ?", now - PENDING_AGE_MS, now - PENDING_EXPIRE_MS);
   for (const o of list) await settle(o);
-  run("UPDATE orders SET status = 'expired' WHERE status IN ('pending','processing') AND created_at <= ?", now - PENDING_EXPIRE_MS);
+  // Expiry: ask the gateway one last time, and expire only the orders it still does not confirm.
+  const old = all("SELECT * FROM orders WHERE status IN ('pending','processing') AND created_at <= ?", now - PENDING_EXPIRE_MS);
+  for (const o of old) {
+    const after = await settle(o);
+    if (after.status === 'pending' || after.status === 'processing') run("UPDATE orders SET status = 'expired', last_error = ? WHERE id = ?", 'expired after a final status check', o.id);
+  }
 }
 setInterval(() => { recheckPending().catch((e) => console.error('[recheck]', e.message)); }, RECHECK_INTERVAL_MS).unref();
 
