@@ -102,7 +102,17 @@ Do these in order. Each one protects players' purchases.
 7. **Switch on.** `PAYMENTS_ENABLED=true` on live keys. Buy the cheapest item yourself with a real payment and check the receipt email and the item on the account.
 8. **Matching payments to money.** Every order stores the iPay88 transaction id, amount in cents, currency, status and time, so each line in iPay88's settlement report can be matched to an order in the database.
 
-## 6a. Real payments with an existing iPay88 (ADAPTIS) account
+## 6. Real payments with Boost Connect (the chosen live provider)
+
+Boost Connect has no sandbox: the first test is a real RM 1 payment, refunded afterwards in Boost's portal.
+
+1. On Render set `PAYMENT_PROVIDER=boost`, `BCPG_BASE_URL=https://api.boostconnect.biz/gateway`, `BCPG_CLIENT_ID=` your client id, and `BCPG_CLIENT_SECRET=` the secret, typed straight into Render. The server refuses to start if any of the three is missing. Keep `PAYMENTS_ENABLED=false` until the test below passes.
+2. `BASE_URL` must be the game's https address and `API_URL` the Render https address. Boost sends the player back to `BASE_URL/api/payments/boost/return?ref=...` and calls `API_URL/api/payments/boost/callback`.
+3. Set `PAYMENTS_ENABLED=true`, buy the cheapest item with each method (Boost, Touch 'n Go, Online banking, Card), check the item arrives exactly once, then refund in the Boost portal.
+
+How it works: the player picks the method in the game, the server opens the payment with Boost using a fresh `LZ-` reference, and the player pays on Boost's page. Boost's callback and the return page only trigger a read-back. The item is granted once, only when the read-back says succeeded with the same uuid, the exact amount in cents, currency MYR and not reversed. A succeeded payment where any detail disagrees is held as REVIEW for a person to check. Pending orders are re-read every 5 minutes, expire 45 minutes after creation, and expired orders are re-read for 3 days so a late success is still granted once.
+
+## 6a. Real payments with an existing iPay88 (ADAPTIS) account (kept in place, unused)
 
 1. Ask iPay88 support to register the game's address on the merchant account (they accept payments only from the website on file). Give them the exact address players use, for example `https://block-game-smoky.vercel.app`, or your custom domain. If the account's current website still needs iPay88, ask for a second merchant account for the game instead.
 2. On Render set `PAYMENT_PROVIDER=ipay88`, `IPAY88_MERCHANT_CODE=` your code, `IPAY88_MERCHANT_KEY=` the key from iPay88's "MERCHANT KEY" email. Keep `BASE_URL` as the game's address and `API_URL` as the Render address.

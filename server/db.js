@@ -85,9 +85,10 @@ CREATE INDEX IF NOT EXISTS orders_ref ON orders(provider_ref);
 
 // Columns added after the first release. SQLite has no "add if missing", so check the table first.
 const orderCols = db.prepare('PRAGMA table_info(orders)').all().map((c) => c.name);
-[['paid_amount_cents', 'INTEGER'], ['currency', 'TEXT'], ['last_error', 'TEXT'], ['last_checked_at', 'INTEGER']].forEach(([name, type]) => {
+[['paid_amount_cents', 'INTEGER'], ['currency', 'TEXT'], ['last_error', 'TEXT'], ['last_checked_at', 'INTEGER'], ['reference_id', 'TEXT']].forEach(([name, type]) => {
   if (!orderCols.includes(name)) db.exec(`ALTER TABLE orders ADD COLUMN ${name} ${type}`);
 });
+db.exec('CREATE INDEX IF NOT EXISTS orders_reference ON orders(reference_id)');
 
 function row(sql, ...p) { return db.prepare(sql).get(...p); }
 function all(sql, ...p) { return db.prepare(sql).all(...p); }

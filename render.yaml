@@ -49,6 +49,12 @@ services:
         value: "true"
       - key: PAYMENTS_ENABLED
         value: "true"
+      - key: BCPG_BASE_URL
+        sync: false
+      - key: BCPG_CLIENT_ID
+        sync: false
+      - key: BCPG_CLIENT_SECRET
+        sync: false
       - key: IPAY88_MERCHANT_CODE
         sync: false
       - key: IPAY88_MERCHANT_KEY

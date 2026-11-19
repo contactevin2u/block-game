@@ -33,6 +33,13 @@ window.CONFIG = {
     { file: 'music/easy-lemon.mp3', title: 'Easy Lemon', artist: 'Kevin MacLeod', license: 'CC BY 4.0', source: 'incompetech.com' },
     { file: 'music/dreamy-flashback.mp3', title: 'Dreamy Flashback', artist: 'Kevin MacLeod', license: 'CC BY 4.0', source: 'incompetech.com' }
   ],
+  // Live methods offered by our own picker when PAYMENT_PROVIDER=boost. The player pays on Boost's page.
+  BOOST_METHODS: [
+    { id: 'boost', name: 'Boost', how: 'Boost eWallet' },
+    { id: 'tng', name: "Touch 'n Go", how: "Touch 'n Go eWallet" },
+    { id: 'fpx', name: 'Online banking (FPX)', how: 'Your bank login' },
+    { id: 'card', name: 'Card', how: 'Credit or debit card' }
+  ],
   // Demo checkout methods. Plain names on purpose: no bank or wallet brands, and nothing asks for real card details.
   PAYMENT_METHODS: [
     { id: 'ewallet', name: 'E-wallet', how: 'Demo: approve or cancel on the next screen' },

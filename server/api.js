@@ -188,7 +188,7 @@ function catalogueItem(type, id) {
   if (type === 'coins') { const p = P.coins.find((c) => c.id === id); if (p) return { type, id, name: p.coins.toLocaleString() + ' coins', price: p.price, coins: p.coins }; }
   return null;
 }
-function orderToClient(o) { return { id: o.id, status: o.status, method: o.method, provider: o.provider, createdAt: o.created_at, paidAt: o.paid_at, transactionId: o.provider_ref, item: { type: o.type, id: o.item_id, name: o.name, price: o.price_cents / 100, coins: o.coins } }; }
+function orderToClient(o) { return { id: o.id, status: o.status, method: o.method, provider: o.provider, createdAt: o.created_at, paidAt: o.paid_at, transactionId: o.provider_ref, referenceId: o.reference_id || null, item: { type: o.type, id: o.item_id, name: o.name, price: o.price_cents / 100, coins: o.coins } }; }
 
 // Idempotent grant: a second webhook or a poll after payment changes nothing.
 function grant(orderId) {
@@ -217,13 +217,33 @@ r.post('/orders', needUser, paymentsOpen, auth.rateLimit('orders', 20, 15 * 6000
   if (item.type === 'removeAds' && u.remove_ads) return bad(res, 'You already own Remove Ads.');
   if (item.type === 'theme' && owned.includes(item.id)) return bad(res, 'You already own this theme.');
   const id = 'ord_' + auth.token(6).toUpperCase().replace(/[^A-Z0-9]/g, 'X').slice(0, 8);
-  const o = { id, user_id: u.id, type: item.type, item_id: item.id, name: item.name, price_cents: Math.round(item.price * 100), coins: item.coins || 0, status: 'pending', provider: pay.name, provider_ref: null, method: null, created_at: Date.now() };
+  // Boost: the player picks the method in our own picker; one method per Boost page.
+  const method = pay.name === 'boost' ? String(req.body.method || '') : null;
+  if (pay.name === 'boost' && !pay.METHODS.includes(method)) return bad(res, 'Pick Boost, Touch \'n Go, Online banking or Card.');
+  const o = { id, user_id: u.id, type: item.type, item_id: item.id, name: item.name, price_cents: Math.round(item.price * 100), coins: item.coins || 0, status: 'pending', provider: pay.name, provider_ref: null, reference_id: null, method, created_at: Date.now() };
   try {
     const ck = await pay.createCheckout(o, { baseUrl: baseUrl(req), apiUrl: apiUrl(req), email: u.email });
-    o.provider_ref = ck.providerRef;
-    run('INSERT INTO orders (id, user_id, type, item_id, name, price_cents, coins, status, provider, provider_ref, created_at, currency) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)', o.id, o.user_id, o.type, o.item_id, o.name, o.price_cents, o.coins, o.status, o.provider, o.provider_ref, o.created_at, 'MYR');
+    o.provider_ref = ck.providerRef; if (ck.referenceId) o.reference_id = ck.referenceId;
+    run('INSERT INTO orders (id, user_id, type, item_id, name, price_cents, coins, status, provider, provider_ref, reference_id, method, created_at, currency) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)', o.id, o.user_id, o.type, o.item_id, o.name, o.price_cents, o.coins, o.status, o.provider, o.provider_ref, o.reference_id, o.method, o.created_at, 'MYR');
     res.json({ order: orderToClient(o), checkoutUrl: ck.checkoutUrl });
   } catch (e) { console.error('[orders]', e.message); bad(res, 'Could not start the payment. Try again in a moment.', 502); }
+});
+
+// ---- Boost Connect -------------------------------------------------------------------
+// The callback is unsigned and the return page is the player's browser: both only trigger a read-back.
+function boostOrderByRef(ref) { return ref ? row('SELECT * FROM orders WHERE reference_id = ? AND provider = ?', String(ref).slice(0, 80), 'boost') : null; }
+r.post('/payments/boost/callback', express.urlencoded({ extended: false }), (req, res) => {
+  res.status(200).type('text').send('OK'); // reply at once, then read back
+  const b = req.body || {}, ref = b.referenceId || b.reference_id || b.ref || (req.query && req.query.ref);
+  const o = boostOrderByRef(ref);
+  if (!o) return;
+  if (o.status === 'pending' || o.status === 'processing' || o.status === 'expired') settle(o).catch((e) => console.error('[boost callback]', e.message));
+});
+r.get('/payments/boost/return', async (req, res) => {
+  const o = boostOrderByRef(req.query.ref);
+  if (!o) return res.redirect(baseUrl(req) + '/#/shop');
+  if (o.status === 'pending' || o.status === 'processing' || o.status === 'expired') { try { await settle(o); } catch (e) { console.error('[boost return]', e.message); } }
+  res.redirect(baseUrl(req) + '/#/pay/return/' + o.id);
 });
 
 r.get('/orders/:id', needUser, async (req, res) => {
@@ -242,7 +262,9 @@ async function settle(o) {
     const v = await pay.verify(o);
     run('UPDATE orders SET last_checked_at = ? WHERE id = ?', Date.now(), o.id);
     if (v === 'paid') return grant(o.id);
-    if (v === 'failed') run('UPDATE orders SET status = ? WHERE id = ?', 'failed', o.id);
+    if (v === 'failed') run('UPDATE orders SET status = ?, last_error = ? WHERE id = ?', 'failed', pay.lastReason || 'failed', o.id);
+    // Succeeded at the gateway but something does not agree: hold for a human, grant nothing.
+    if (v === 'review') { console.warn('[verify] REVIEW', o.id, pay.lastReason); run('UPDATE orders SET status = ?, last_error = ? WHERE id = ?', 'review', String(pay.lastReason || 'review').slice(0, 200), o.id); }
   } catch (e) { settle.reachable = false; console.error('[verify] gateway unreachable for', o.id, e.message); }
   return row('SELECT * FROM orders WHERE id = ?', o.id);
 }
@@ -251,10 +273,16 @@ async function settle(o) {
 // so a lost callback never leaves a paid player without the item. Orders older than PENDING_EXPIRE_MS expire.
 const PENDING_AGE_MS = parseInt(process.env.PENDING_AGE_MS || String(15 * 60000), 10);
 const RECHECK_INTERVAL_MS = parseInt(process.env.RECHECK_INTERVAL_MS || String(5 * 60000), 10);
-const PENDING_EXPIRE_MS = parseInt(process.env.PENDING_EXPIRE_MS || String(2 * 3600000), 10);
+// Boost's page lives about 15 minutes; expire 30 minutes after that. Expired Boost orders are re-read for 3 days.
+const PENDING_EXPIRE_MS = parseInt(process.env.PENDING_EXPIRE_MS || String(pay.name === 'boost' ? 45 * 60000 : 2 * 3600000), 10);
+const EXPIRED_RECHECK_MS = parseInt(process.env.EXPIRED_RECHECK_MS || String(3 * 86400000), 10);
 async function recheckPending() {
   if (pay.name === 'mock' || pay.name === 'none') return;
   const now = Date.now();
+  if (pay.name === 'boost') {
+    const late = all("SELECT * FROM orders WHERE status = 'expired' AND provider = 'boost' AND created_at > ?", now - EXPIRED_RECHECK_MS);
+    for (const o of late) await settle(o); // a late success is granted once by grant()
+  }
   const list = all("SELECT * FROM orders WHERE status IN ('pending','processing') AND created_at < ? AND created_at > ?", now - PENDING_AGE_MS, now - PENDING_EXPIRE_MS);
   for (const o of list) await settle(o);
   // Expiry: ask the gateway one last time, and expire only the orders it still does not confirm.

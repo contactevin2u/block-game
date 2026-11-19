@@ -51,8 +51,8 @@
     isServer: SERVER,
 
     // -> Promise<{ order, checkoutUrl }>
-    createOrder: function (item) {
-      if (SERVER) return B.api('POST', '/orders', { type: item.type, id: item.id });
+    createOrder: function (item, method) {
+      if (SERVER) return B.api('POST', '/orders', { type: item.type, id: item.id, method: method || undefined });
       var u = B.user();
       var o = { id: uid(), userId: u.id, item: { type: item.type, id: item.id, name: item.name, price: item.price, coins: item.coins || 0 }, status: 'pending', method: null, createdAt: Date.now(), expiresAt: Date.now() + 30 * 60000 };
       B.saveOrder(o);

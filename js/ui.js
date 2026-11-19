@@ -242,6 +242,7 @@
       var item = items.filter(function (i) { return i.type === parts[0] && i.id === parts[1]; })[0];
       if (!item) return;
       if (B.isGuest()) { toast('Create an account first so the purchase is saved to it.', 'warn'); return go('#/create'); }
+      if (root.APP_ENV && root.APP_ENV.provider === 'boost') return go('#/pay/method/' + item.type + '/' + item.id);
       b.disabled = true; b.textContent = 'Starting payment';
       S.createOrder(item).then(function (d) {
         if (/^https?:/i.test(d.checkoutUrl)) location.href = d.checkoutUrl; else go(d.checkoutUrl);
@@ -278,6 +279,26 @@
     });
   };
 
+  // Our own method picker for Boost Connect: one method per Boost page. The player pays on Boost's page.
+  screens.paymethod = function (p) {
+    var items = S.catalogue(B.user()), item = items.filter(function (i) { return i.type === p[0] && i.id === p[1]; })[0];
+    if (!item) return header('#/shop', 'Shop') + '<h1>Item not found</h1>';
+    return header('#/shop', 'Shop') + '<h1>Pay ' + money(item.price) + '</h1>' +
+      '<div class="card order"><div class="row"><span>' + esc(item.name) + '</span><b>' + money(item.price) + '</b></div></div>' +
+      '<p class="eyebrow">Choose how to pay</p>' + C.BOOST_METHODS.map(function (m) { return '<button type="button" class="card method" data-method="' + m.id + '"><b>' + esc(m.name) + '</b><span class="muted small">' + esc(m.how) + ' · you pay on the secure payment page and come back here</span></button>'; }).join('') +
+      '<p class="muted small center">The item is added to your account after the payment is confirmed.</p><a class="link center" href="#/shop">Cancel</a>';
+  };
+  screens.paymethod.bind = function (p) {
+    var items = S.catalogue(B.user()), item = items.filter(function (i) { return i.type === p[0] && i.id === p[1]; })[0];
+    if (!item) return;
+    $('[data-method]').forEach(function (b) { b.addEventListener('click', function () {
+      $('[data-method]').forEach(function (x) { x.disabled = true; });
+      b.querySelector('b').textContent = 'Opening the payment page';
+      S.createOrder(item, b.getAttribute('data-method')).then(function (d) { location.href = d.checkoutUrl; })
+        .catch(function (err) { $('[data-method]').forEach(function (x) { x.disabled = false; }); b.querySelector('b').textContent = C.BOOST_METHODS.filter(function (m) { return m.id === b.getAttribute('data-method'); })[0].name; toast(err.message, 'warn'); });
+    }); });
+  };
+
   screens.payreturn = function (p) {
     return '<div class="center pad"><div class="ring spin">&#8635;</div><h1 id="h">Checking your payment</h1><p class="lead" id="msg">Waiting for the bank to confirm. This usually takes a few seconds.</p><div id="done" hidden><a class="btn btn-primary" href="#/shop">Back to shop</a><a class="link center" href="#/lobby">Go to lobby</a></div></div>';
   };
@@ -287,6 +308,8 @@
       if (!$('#h')) return;
       $('.ring').classList.remove('spin');
       if (o && o.status === 'paid') { $('.ring').innerHTML = '&#10003;'; $('.ring').classList.add('good'); $('#h').textContent = 'Payment received'; $('#msg').textContent = o.item.name + ' is now on your account. A receipt for order ' + o.id + ' was sent to your email.'; }
+      else if (o && o.status === 'review') { $('#h').textContent = 'Payment received, being checked'; $('#msg').textContent = 'Your payment reached us but a detail did not match, so a person will check it. The item is added once that is done. Nothing is charged twice.'; }
+      else if (o && o.status === 'expired') { $('#h').textContent = 'Payment page expired'; $('#msg').textContent = 'The payment page was not completed in time. If you did pay, the item is added automatically once the payment is confirmed, within a few minutes. Otherwise nothing was charged.'; }
       else if (o && (o.status === 'pending' || o.status === 'processing')) { $('#h').textContent = 'Still waiting for the bank'; $('#msg').textContent = 'Your payment has not been confirmed yet. If you completed it, the item will appear on your account within a few minutes. Nothing is charged twice.'; }
       else { $('.ring').innerHTML = '&#10005;'; $('#h').textContent = 'Payment not completed'; $('#msg').textContent = 'The bank did not confirm this order. Nothing was charged.'; }
       $('#done').hidden = false;
@@ -429,7 +452,7 @@
   var routes = [
     [/^\/?$/, 'main'], [/^\/login(?:\/(expired))?$/, 'login'], [/^\/create$/, 'create'], [/^\/forgot$/, 'forgot'], [/^\/reset\/([^/]+)$/, 'reset'], [/^\/confirm-email\/([^/]+)$/, 'confirm-email'], [/^\/inbox$/, 'inbox'],
     [/^\/lobby$/, 'lobby'], [/^\/adventure$/, 'adventure'], [/^\/play\/(classic)$/, 'play'], [/^\/play\/(adventure)\/(\d+)$/, 'play'],
-    [/^\/shop(?:\/(themes|extras|coins|equipment))?$/, 'shop'], [/^\/checkout\/([^/]+)(?:\/(approve))?$/, 'checkout'], [/^\/pay\/return\/([^/]+)$/, 'payreturn'],
+    [/^\/shop(?:\/(themes|extras|coins|equipment))?$/, 'shop'], [/^\/checkout\/([^/]+)(?:\/(approve))?$/, 'checkout'], [/^\/pay\/return\/([^/]+)$/, 'payreturn'], [/^\/pay\/method\/(removeAds|bundle|theme|coins)\/([a-z0-9-]+)$/, 'paymethod'],
     [/^\/settings$/, 'settings'], [/^\/settings\/email$/, 'settingsemail'], [/^\/settings\/password$/, 'settingspassword'],
     [/^\/history(?:\/(all|classic|adventure|battle))?$/, 'history'],
     [/^\/battle$/, 'battle'], [/^\/battle\/quick$/, 'battlequick'], [/^\/battle\/local$/, 'battlelocal']
