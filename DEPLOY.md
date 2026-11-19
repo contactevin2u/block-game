@@ -55,6 +55,14 @@ The free tier sleeps after 15 minutes without visitors and takes about 30 second
 
 For Layout A with a domain, just add `play.yourgame.com` on Render and set `BASE_URL` and `API_URL` to it.
 
+## 5. Real email with Gmail (simplest)
+
+1. In your Google Account go to Security and turn on 2-Step Verification if it is off.
+2. Open https://myaccount.google.com/apppasswords, type a name such as `Block Game`, click Create, and copy the 16-character password.
+3. On Render set `EMAIL_PROVIDER=gmail`, `GMAIL_USER=you@gmail.com`, `GMAIL_APP_PASSWORD=` the 16 characters, `EMAIL_FROM=Block Game <you@gmail.com>`.
+
+Gmail allows about 500 emails a day from a personal account, enough for a start. Move to Brevo or Resend when the game grows.
+
 ## 5a. Real email with Brevo (no domain needed)
 
 1. Create a free account at brevo.com. Go to Senders, add your own email address as a sender, and click the verification link Brevo emails you.

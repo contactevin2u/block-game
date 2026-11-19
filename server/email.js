@@ -6,6 +6,7 @@ const PROVIDER = (process.env.EMAIL_PROVIDER || 'console').toLowerCase();
 const FROM = process.env.EMAIL_FROM || 'Block Game <noreply@example.com>';
 const GAME = process.env.GAME_NAME || 'Block Game';
 const devInbox = [];
+let gmailTransport = null;
 
 function escapeHtml(s) { return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
 
@@ -24,6 +25,14 @@ ${link ? `<p style="margin:0 0 20px"><a href="${escapeHtml(link)}" style="displa
 
 async function send({ to, subject, body, link, linkText }) {
   const { text, html } = render(subject, body, link, linkText);
+  if (PROVIDER === 'gmail') {
+    // Gmail with an App Password (Google Account > Security > 2-Step Verification > App passwords).
+    const user = process.env.GMAIL_USER, pass = (process.env.GMAIL_APP_PASSWORD || '').replace(/\s+/g, '');
+    if (!user || !pass) throw new Error('GMAIL_USER and GMAIL_APP_PASSWORD must be set');
+    if (!gmailTransport) gmailTransport = require('nodemailer').createTransport({ host: 'smtp.gmail.com', port: 465, secure: true, auth: { user, pass } });
+    await gmailTransport.sendMail({ from: FROM.includes('<') ? FROM : `${GAME} <${user}>`, to, subject, text, html });
+    return true;
+  }
   if (PROVIDER === 'brevo') {
     const key = process.env.BREVO_API_KEY;
     if (!key) throw new Error('BREVO_API_KEY is not set');
