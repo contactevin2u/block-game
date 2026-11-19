@@ -1,6 +1,6 @@
 # Pull request: iPay88 payments with Boost, hardened
 
-Follow-up branch `payments-followups` (stacked on this one) adds: Remark text from GAME_NAME, a final iPay88 status check before expiring an order that leaves the order pending if iPay88 cannot be reached, "Quad" wording in the game, and the rename to Blokzu.
+Follow-up branch `payments-followups` (stacked on this one) adds: Remark text from GAME_NAME, a final iPay88 status check before expiring an order that leaves the order pending if iPay88 cannot be reached, "Quad" wording in the game, and the rename to Linezu.
 
 Branch `payments-ipay88-hardening` → `main`. Do not merge until the Render settings in "Before merging" are done.
 

@@ -1,4 +1,4 @@
-# Blokzu
+# Linezu
 
 Browser block-stacking game with Guideline rules: SRS rotation, 7-bag, hold, ghost, lock delay, T-spins, back-to-back, combos, perfect clears. Classic, Adventure with equipment, Battle against the computer, local 2-player, six themes, accounts, shop, history.
 
