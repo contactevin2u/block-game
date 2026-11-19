@@ -38,7 +38,9 @@ function secure(req) { return (req.headers['x-forwarded-proto'] || req.protocol)
 const CROSS_SITE = !!(process.env.CORS_ORIGIN || '').trim();
 function cookieOpts(req, maxAge) {
   const https = secure(req);
-  return { httpOnly: true, sameSite: CROSS_SITE && https ? 'none' : 'lax', secure: https, maxAge: maxAge, path: '/', domain: process.env.COOKIE_DOMAIN || undefined };
+  // Through the Vercel proxy the request is same-site, so 'lax' is right; 'none' only when a different front-end origin calls directly.
+  const direct = CROSS_SITE && https && !req.headers['x-vercel-id'];
+  return { httpOnly: true, sameSite: direct ? 'none' : 'lax', secure: https, maxAge: maxAge, path: '/', domain: process.env.COOKIE_DOMAIN || undefined };
 }
 
 function createSession(req, res, userId) {

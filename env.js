@@ -1,8 +1,11 @@
 /* Front-end environment.
-   - Served by server/index.js: the server replaces this file and the game talks to /api on the same site.
-   - Hosted on Vercel (static): set apiBase to your Render server address so the game talks to it across sites.
-   - apiBase empty and no server: browser-only test mode, everything stored in this browser. */
+   - mode 'server' with an empty apiBase: the game talks to /api on the same website. On Vercel, vercel.json forwards
+     /api to the Render server, so login cookies stay first-party and work on iPhone and iPad. Served by server/index.js
+     directly, the server replaces this file with the same setting.
+   - apiBase set to a full address: the game talks to that server across sites (needs CORS_ORIGIN on the server and a
+     shared custom domain for Safari).
+   - mode 'local': browser-only test mode, everything stored in this browser (see env.local.js). */
 window.APP_ENV = {
-  mode: 'auto',
-  apiBase: 'https://block-game-api.onrender.com'   // the Render server (no trailing slash)
+  mode: 'server',
+  apiBase: ''
 };
