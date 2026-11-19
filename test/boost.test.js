@@ -98,7 +98,7 @@ function client(s) {
   const age = Date.now() - new Date(parsed.created).getTime();
   check('created is about 10 s in the past, ISO with milliseconds', /\.\d{3}Z$/.test(parsed.created) && age >= 9500 && age <= 12000);
   check('returnUrl on the game address, callbackUrl on the API address', parsed.returnUrl.startsWith('https://game.test/api/payments/boost/return?ref=LZ-') && parsed.callbackUrl === 'https://api.test/api/payments/boost/callback');
-  check('reference starts with LZ- and ends with 8 hex', /^LZ-ord_[A-Z0-9]+-[0-9a-f]{8}$/.test(boost.reference('ord_ZZZZ1234')));
+  check('reference is LZ-<order id without underscore>-<8 HEX>, letters digits hyphens only', /^LZ-ORDZZZZ1234-[0-9A-F]{8}$/.test(boost.reference('ord_ZZZZ1234')));
   delete process.env.BCPG_CLIENT_ID; delete process.env.BCPG_CLIENT_SECRET; delete process.env.BCPG_BASE_URL;
 
   // ---- start guard ----
@@ -145,6 +145,9 @@ function client(s) {
   r = await call('POST', '/orders', { type: 'theme', id: 'lcd', method: 'card' });
   const failedRef = inits[inits.length - 1].ref;
   check('init 500 is reported, not retried', r.status === 502 && inits.length === initsBefore + 1 && inits.filter((i) => i.ref === failedRef).length === 1);
+  // the order was saved BEFORE Boost was asked, and a failed init leaves it failed (AutoCount's portal rule)
+  { const { DatabaseSync } = require('node:sqlite'); const d = new DatabaseSync(s.dbPath); const row = d.prepare('SELECT status, last_error FROM orders WHERE reference_id = ?').get(failedRef); d.close();
+    check('order row existed before init and is failed after the 500', !!row && row.status === 'failed' && /Boost init/.test(row.last_error || '')); }
   failInit = null;
   r = await call('POST', '/orders', { type: 'theme', id: 'lcd', method: 'card' });
   check('the next attempt uses a new reference and succeeds', r.status === 200 && r.d.order.referenceId !== failedRef);
@@ -192,6 +195,19 @@ function client(s) {
   }
   await reviewCoins('wrong currency', (rec) => { rec.currency = 'USD'; });
   await reviewCoins('reversed', (rec) => { rec.reversed = true; });
+  // read-back shapes AutoCount's portal accepts: no currency field, amount as a string
+  async function paidCoins(name, mutate) {
+    const coinsBefore = (await call('GET', '/me')).d.user.coins;
+    const o = (await call('POST', '/orders', { type: 'coins', id: 'coins-s', method: 'boost' })).d.order;
+    const rec = refs.get(o.referenceId); rec.status = 'succeeded'; mutate(rec);
+    await call('POST', '/payments/boost/callback', { referenceId: o.referenceId }, true); await sleep(300);
+    const after = (await call('GET', '/orders/' + o.id)).d;
+    check(name + ' -> paid once', after.order.status === 'paid' && after.user.coins === coinsBefore + 1000);
+  }
+  await paidCoins('read-back without a currency field', (rec) => { delete rec.currency; });
+  await paidCoins('amount as a string "9.99"', (rec) => { rec.amount = '9.99'; });
+  await paidCoins('reversed: false as text', (rec) => { rec.reversed = 'false'; });
+  await reviewCoins('reversed given as a date', (rec) => { rec.reversed = '2026-11-19T10:00:00Z'; });
   check('review reasons are logged', /REVIEW/.test(s.log()) && /amount mismatch/.test(s.log()) && /uuid mismatch/.test(s.log()) && /currency mismatch/.test(s.log()) && /reversed/.test(s.log()));
 
   // cancelled -> no grant

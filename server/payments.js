@@ -115,6 +115,19 @@ function amountToCents(s) {
   const m = String(s == null ? '' : s).trim().match(/^(\d+)\.(\d{2})$/); return m ? parseInt(m[1], 10) * 100 + parseInt(m[2], 10) : null;
 }
 
+// Boost's amount in cents: a number or a numeric string ("12.9", "12.90", 12.9). AutoCount's centsOf does the same.
+function boostCents(a) {
+  if (a === null || a === undefined || typeof a === 'boolean' || String(a).trim() === '') return null;
+  const n = Number(a);
+  return Number.isFinite(n) ? Math.round(n * 100) : null;
+}
+// Any value Boost puts in "reversed" counts (true, a date, an id), except an explicit false.
+function isReversed(v) {
+  if (v === undefined || v === null || v === false || v === 0) return false;
+  const t = String(v).trim().toLowerCase();
+  return !(t === '' || t === 'false' || t === '0' || t === 'null');
+}
+
 // Boost Connect (BCPG). Production only, no sandbox: tests run against a fake server set by BCPG_BASE_URL.
 // Rules followed exactly as given: Basic auth over an HMAC of METHOD + bare path + the exact body bytes;
 // init with a fresh LZ- reference each attempt; the read-back is the only thing that decides a payment.
@@ -129,12 +142,14 @@ const boost = {
   },
   async call(method, path, body) {
     const bytes = body === undefined ? '' : body;
-    const r = await fetch(this.base() + path, { method, headers: { Accept: 'application/json', 'Content-Type': 'application/json', Authorization: this.sign(method, path, bytes) }, body: method === 'GET' ? undefined : bytes });
+    const r = await fetch(this.base() + path, { method, headers: { Accept: 'application/json', 'Content-Type': 'application/json', Authorization: this.sign(method, path, bytes) }, body: method === 'GET' ? undefined : bytes, signal: AbortSignal.timeout(parseInt(process.env.BCPG_TIMEOUT_MS || '15000', 10)) });
     const text = await r.text();
     let json = null; try { json = text ? JSON.parse(text) : null; } catch (e) {}
     return { status: r.status, json, text };
   },
-  reference(orderId) { return 'LZ-' + orderId + '-' + crypto.randomBytes(4).toString('hex'); },
+  // Same shape as the references AutoCount's portal has used live on this merchant (B2B-118-520FCFBB):
+  // letters, digits and hyphens only. The order id's underscore is dropped.
+  reference(orderId) { return 'LZ-' + String(orderId).replace(/[^A-Za-z0-9]/g, '').toUpperCase() + '-' + crypto.randomBytes(4).toString('hex').toUpperCase(); },
   description(name) { return String(name || 'Linezu purchase').replace(/[^A-Za-z0-9 .-]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 60) || 'Linezu purchase'; },
   // Body is built by hand so the amount keeps two decimals as a JSON number, and so the signed bytes are the sent bytes.
   initBody(order, ctx) {
@@ -150,7 +165,7 @@ const boost = {
   async createCheckout(order, ctx) {
     if (!this.METHODS.includes(order.method)) throw new Error('Pick Boost, Touch \'n Go, Online banking or Card.');
     if (!/^https:\/\//.test(ctx.baseUrl) || !/^https:\/\//.test(ctx.apiUrl)) throw new Error('BASE_URL and API_URL must be https for Boost');
-    order.reference_id = this.reference(order.id);
+    order.reference_id = order.reference_id || this.reference(order.id);
     if (order.price_cents <= 0) throw new Error('Amount must be more than 0');
     const body = this.initBody(order, ctx);
     const r = await this.call('POST', '/v1/payments/init', body); // never retried with the same reference
@@ -171,10 +186,11 @@ const boost = {
     if (st === 'succeeded') {
       const problems = [];
       if (String(p.uuid || '') !== String(order.provider_ref || '')) problems.push('uuid mismatch');
-      const cents = amountToCents(p.amount);
+      const cents = boostCents(p.amount);
       if (cents === null || cents !== order.price_cents) problems.push('amount mismatch: got ' + p.amount + ', expected ' + (order.price_cents / 100).toFixed(2));
-      if (String(p.currency || '') !== 'MYR') problems.push('currency mismatch: ' + p.currency);
-      if (p.reversed === true || String(p.reversed || '').toLowerCase() === 'true') problems.push('reversed');
+      // A missing currency is MYR, as in AutoCount's portal; only a different currency is a problem.
+      if (String(p.currency || 'MYR').trim().toUpperCase() !== 'MYR') problems.push('currency mismatch: ' + p.currency);
+      if (isReversed(p.reversed)) problems.push('reversed (' + String(p.reversed).slice(0, 60) + ')');
       if (problems.length) { this.lastReason = problems.join('; '); return 'review'; }
       return 'paid';
     }

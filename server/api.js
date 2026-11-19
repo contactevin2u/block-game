@@ -233,6 +233,22 @@ r.post('/orders', needUser, paymentsOpen, auth.rateLimit('orders', 20, 15 * 6000
   const method = pay.name === 'boost' ? String(req.body.method || '') : null;
   if (pay.name === 'boost' && !pay.METHODS.includes(method)) return bad(res, 'Pick Boost, Touch \'n Go, Online banking or Card.');
   const o = { id, user_id: u.id, type: item.type, item_id: item.id, name: item.name, price_cents: Math.round(item.price * 100), coins: item.coins || 0, status: 'pending', provider: pay.name, provider_ref: null, reference_id: null, method, created_at: Date.now() };
+  if (pay.name === 'boost') {
+    // As in AutoCount's portal: the order and its reference are saved BEFORE Boost is asked, so any page Boost
+    // opens has an order behind it. A failed init leaves the order 'failed'; the reference is never sent again.
+    o.reference_id = pay.reference(o.id);
+    run('INSERT INTO orders (id, user_id, type, item_id, name, price_cents, coins, status, provider, provider_ref, reference_id, method, created_at, currency) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)', o.id, o.user_id, o.type, o.item_id, o.name, o.price_cents, o.coins, o.status, o.provider, null, o.reference_id, o.method, o.created_at, 'MYR');
+    try {
+      const ck = await pay.createCheckout(o, { baseUrl: baseUrl(req), apiUrl: apiUrl(req), email: u.email });
+      o.provider_ref = ck.providerRef;
+      run('UPDATE orders SET provider_ref = ? WHERE id = ?', o.provider_ref, o.id);
+      return res.json({ order: orderToClient(o), checkoutUrl: ck.checkoutUrl });
+    } catch (e) {
+      run('UPDATE orders SET status = ?, last_error = ? WHERE id = ?', 'failed', ('Boost init: ' + e.message).slice(0, 200), o.id);
+      console.error('[orders] boost init', o.id, e.message);
+      return bad(res, 'Could not start the payment. Try again in a moment.', 502);
+    }
+  }
   try {
     const ck = await pay.createCheckout(o, { baseUrl: baseUrl(req), apiUrl: apiUrl(req), email: u.email });
     o.provider_ref = ck.providerRef; if (ck.referenceId) o.reference_id = ck.referenceId;
@@ -244,17 +260,19 @@ r.post('/orders', needUser, paymentsOpen, auth.rateLimit('orders', 20, 15 * 6000
 // ---- Boost Connect -------------------------------------------------------------------
 // The callback is unsigned and the return page is the player's browser: both only trigger a read-back.
 function boostOrderByRef(ref) { return ref ? row('SELECT * FROM orders WHERE reference_id = ? AND provider = ?', String(ref).slice(0, 80), 'boost') : null; }
-r.post('/payments/boost/callback', express.urlencoded({ extended: false }), (req, res) => {
+const BOOST_RECHECK_GAP_MS = 2000; // AutoCount's portal: a callback or return re-reads an order at most every 2 s
+function boostCheckedRecently(o) { return o.last_checked_at && Date.now() - o.last_checked_at < BOOST_RECHECK_GAP_MS; }
+r.post('/payments/boost/callback', auth.rateLimit('boost-callback', 240, 60000), express.urlencoded({ extended: false }), (req, res) => {
   res.status(200).type('text').send('OK'); // reply at once, then read back
   const b = req.body || {}, ref = b.referenceId || b.reference_id || b.ref || (req.query && req.query.ref);
   const o = boostOrderByRef(ref);
-  if (!o) return;
+  if (!o || boostCheckedRecently(o)) return;
   if (o.status === 'pending' || o.status === 'processing' || o.status === 'expired') settle(o).catch((e) => console.error('[boost callback]', e.message));
 });
 r.get('/payments/boost/return', async (req, res) => {
   const o = boostOrderByRef(req.query.ref);
   if (!o) return res.redirect(baseUrl(req) + '/#/shop');
-  if (o.status === 'pending' || o.status === 'processing' || o.status === 'expired') { try { await settle(o); } catch (e) { console.error('[boost return]', e.message); } }
+  if (!boostCheckedRecently(o) && (o.status === 'pending' || o.status === 'processing' || o.status === 'expired')) { try { await settle(o); } catch (e) { console.error('[boost return]', e.message); } }
   res.redirect(baseUrl(req) + '/#/pay/return/' + o.id);
 });
 
