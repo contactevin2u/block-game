@@ -33,6 +33,8 @@ a { color: var(--accent); }
 .back:hover { color: var(--ink); }
 .eyebrow { font-family: var(--font-display); font-size: 12px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); font-weight: 700; margin-bottom: -8px; }
 .eyebrow.good { color: var(--good); } .eyebrow.danger { color: var(--danger); }
+/* Screens that fill a container after loading get the same vertical rhythm as the shell. */
+#co, #reset-body, #mails, #runs { display: flex; flex-direction: column; gap: 16px; }
 .lead { color: var(--muted); font-size: 16px; }
 .muted { color: var(--muted); } .small { font-size: 14px; } .center { text-align: center; } .pad { padding-top: 60px; } .accent { color: var(--accent); } .good { color: var(--good); } .danger { color: var(--danger); }
 .email { font-size: 24px; overflow-wrap: anywhere; }
