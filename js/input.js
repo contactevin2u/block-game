@@ -4,14 +4,14 @@
   var C = root.CONFIG;
 
   var KEYMAPS = {
-    p1: { left: ['ArrowLeft'], right: ['ArrowRight'], soft: ['ArrowDown'], hard: [' ', 'Space'], cw: ['ArrowUp', 'x', 'X'], ccw: ['z', 'Z', 'Control'], hold: ['c', 'C', 'Shift'], pause: ['Escape', 'p', 'P'] },
-    p2: { left: ['a', 'A'], right: ['d', 'D'], soft: ['s', 'S'], hard: ['w', 'W'], cw: ['e', 'E'], ccw: ['q', 'Q'], hold: ['f', 'F'], pause: [] }
+    arrows: { left: ['ArrowLeft'], right: ['ArrowRight'], soft: ['ArrowDown'], hard: [' ', 'Space'], cw: ['ArrowUp', 'x', 'X'], ccw: ['z', 'Z', 'Control'], hold: ['c', 'C', 'Shift'], pause: ['Escape', 'p', 'P'] },
+    wasd: { left: ['a', 'A'], right: ['d', 'D'], soft: ['s', 'S'], hard: ['w', 'W'], cw: ['e', 'E'], ccw: ['q', 'Q'], hold: ['f', 'F'], pause: [] }
   };
 
   function Input(game, opts) {
     opts = opts || {};
     this.game = game;
-    this.map = KEYMAPS[opts.keymap || 'p1'];
+    this.map = KEYMAPS[opts.keymap || 'arrows'];
     this.onPause = opts.onPause || function () {};
     this.onEquip = opts.onEquip || null;
     this.enabled = true;

@@ -21,8 +21,8 @@
 
   // Key guide for one player. Keys are listed in the order players read them: move, drops, rotate, hold.
   var KEY_LABELS = {
-    p1: [['&#8592; &#8594;', 'Move'], ['&#8595;', 'Soft drop'], ['Space', 'Hard drop'], ['Z / X', 'Rotate'], ['C', 'Hold']],
-    p2: [['A / D', 'Move'], ['S', 'Soft drop'], ['W', 'Hard drop'], ['Q / E', 'Rotate'], ['F', 'Hold']]
+    arrows: [['&#8592; &#8594;', 'Move'], ['&#8595;', 'Soft drop'], ['Space', 'Hard drop'], ['Z / X', 'Rotate'], ['C', 'Hold']],
+    wasd: [['A / D', 'Move'], ['S', 'Soft drop'], ['W', 'Hard drop'], ['Q / E', 'Rotate'], ['F', 'Hold']]
   };
   function keyGuide(who, title) {
     return '<div class="keyguide"><b>' + esc(title) + '</b>' + KEY_LABELS[who].map(function (k) { return '<span class="kv"><kbd>' + k[0] + '</kbd>' + esc(k[1]) + '</span>'; }).join('') + '</div>';
@@ -66,7 +66,7 @@
       html += '<div class="equip-bar">' + C.EQUIPMENT.map(function (e) { return '<button type="button" class="equip" data-equip="' + e.id + '" title="' + esc(e.desc) + '"><span class="equip-key">' + e.key + '</span><span class="equip-name">' + esc(e.name) + '</span><span class="equip-count" data-count="' + e.id + '">0</span></button>'; }).join('') + '</div>';
     }
     if (m !== 'local') html += touchControls();
-    if (m === 'local') html += '<div class="local-help">' + keyGuide('p2', 'Player 2 · left side of keyboard') + keyGuide('p1', 'Player 1 · right side of keyboard') + '</div>';
+    if (m === 'local') html += '<div class="local-help">' + keyGuide('wasd', 'Player 1 · left board · W A S D') + keyGuide('arrows', 'Player 2 · right board · arrows') + '</div>';
     html += '<div class="overlay" hidden></div></div>';
     this.root.innerHTML = html;
     this.el = this.root.firstElementChild;
@@ -120,7 +120,7 @@
     this.players = [];
     if (m === 'battle') {
       var g1 = new E.Game({ seed: seed, startLevel: 1, levelUp: false }), g2 = new E.Game({ seed: seed, startLevel: 1, levelUp: false });
-      this.players.push(this.makePlayer(0, g1, 'p1'));
+      this.players.push(this.makePlayer(0, g1, 'arrows'));
       var p2 = this.makePlayer(1, g2, null);
       var rating = this.user.rating || 1000, diff = Math.max(0.03, Math.min(0.25, 0.25 - (rating - 1000) / 2000));
       p2.bot = new root.Bot(g2, { actionInterval: Math.max(0.05, 0.16 - (rating - 1000) / 8000), thinkDelay: 0.35, mistake: diff });
@@ -128,10 +128,10 @@
       this.players.push(p2);
       this.el.querySelector('[data-player="1"] .side-left').insertAdjacentHTML('afterbegin', '<div class="box opp"><span class="box-label">Opponent</span><b>' + esc(this.opponent.name) + '</b><span class="muted">' + this.opponent.rating + '</span></div>');
     } else if (m === 'local') {
-      this.players.push(this.makePlayer(0, new E.Game({ seed: seed, levelUp: false }), 'p1'));
-      this.players.push(this.makePlayer(1, new E.Game({ seed: seed, levelUp: false }), 'p2'));
+      this.players.push(this.makePlayer(0, new E.Game({ seed: seed, levelUp: false }), 'wasd'));   // Player 1, left board
+      this.players.push(this.makePlayer(1, new E.Game({ seed: seed, levelUp: false }), 'arrows')); // Player 2, right board
     } else {
-      this.players.push(this.makePlayer(0, new E.Game({ seed: seed, startLevel: startLevel, levelUp: m === 'classic' }), 'p1'));
+      this.players.push(this.makePlayer(0, new E.Game({ seed: seed, startLevel: startLevel, levelUp: m === 'classic' }), 'arrows'));
     }
     this.layout();
     this.running = true; this.paused = false; this.finished = false;
@@ -146,8 +146,8 @@
     var self = this;
     this.paused = true; this.localIntroShown = true;
     this.setOverlay('<div class="panel wide"><div class="panel-head"><p class="eyebrow">Local 2-player</p><h2>Controls</h2></div>' +
-      '<p class="muted small">Both players share this keyboard at the same time. Player 2 sits on the left, Player 1 on the right.</p>' +
-      '<div class="keyguide-row">' + keyGuide('p2', 'Player 2 · left board') + keyGuide('p1', 'Player 1 · right board') + '</div>' +
+      '<p class="muted small">Both players share this keyboard at the same time. Player 1 sits on the left and uses W A S D. Player 2 sits on the right and uses the arrow keys.</p>' +
+      '<div class="keyguide-row">' + keyGuide('wasd', 'Player 1 · left board') + keyGuide('arrows', 'Player 2 · right board') + '</div>' +
       '<p class="muted small">When one player tops out, the other keeps playing. The longer survivor wins.</p>' +
       '<div class="panel-actions"><button type="button" class="btn btn-primary" data-do="start">Start match</button><button type="button" class="link-btn" data-do="quit">Back to battle</button></div></div>');
     var onKey = function (e) { if (e.key === 'Enter') { e.preventDefault(); begin(); } };
@@ -425,8 +425,8 @@
       this.paused = true;
       this.players.forEach(function (p) { p.game.setSoftDrop(false); });
       var keys = this.mode === 'local'
-        ? '<div class="keyguide-row">' + keyGuide('p2', 'Player 2') + keyGuide('p1', 'Player 1') + '</div>'
-        : (isTouch ? '<p class="muted small foot-note">Swipe sideways to move · tap to rotate · flick down to drop · or use the buttons</p>' : '<div class="keyguide-row">' + keyGuide('p1', 'Keyboard') + '</div>');
+        ? '<div class="keyguide-row">' + keyGuide('wasd', 'Player 1 · left') + keyGuide('arrows', 'Player 2 · right') + '</div>'
+        : (isTouch ? '<p class="muted small foot-note">Swipe sideways to move · tap to rotate · flick down to drop · or use the buttons</p>' : '<div class="keyguide-row">' + keyGuide('arrows', 'Keyboard') + '</div>');
       this.setOverlay('<div class="panel' + (this.mode === 'local' ? ' wide' : '') + '"><div class="panel-head"><p class="eyebrow">Take a breath</p><h2>Paused</h2></div>' + keys +
         '<div class="panel-actions"><button type="button" class="btn btn-primary" data-do="resume">Resume</button><button type="button" class="btn btn-secondary" data-do="restart">Restart</button><button type="button" class="link-btn" data-do="quit">' + (this.mode === 'local' || this.mode === 'battle' ? 'Quit to battle' : 'Quit to lobby') + '</button></div>' +
         '<p class="muted small foot-note">Esc or P pauses</p></div>');
