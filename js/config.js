@@ -33,12 +33,16 @@ window.CONFIG = {
     { file: 'music/easy-lemon.mp3', title: 'Easy Lemon', artist: 'Kevin MacLeod', license: 'CC BY 4.0', source: 'incompetech.com' },
     { file: 'music/dreamy-flashback.mp3', title: 'Dreamy Flashback', artist: 'Kevin MacLeod', license: 'CC BY 4.0', source: 'incompetech.com' }
   ],
-  // Live methods offered by our own picker when PAYMENT_PROVIDER=boost. The player pays on Boost's page.
+  // The pay page's options when PAYMENT_PROVIDER=boost, in this order (DuitNow QR leads, as on the AALYX pay page).
+  // The server says which are switched on (boostMethods); the logos are in img/pay-methods.
   BOOST_METHODS: [
-    { id: 'boost', name: 'Boost', how: 'Boost eWallet' },
-    { id: 'tng', name: "Touch 'n Go", how: "Touch 'n Go eWallet" },
-    { id: 'fpx', name: 'Online banking (FPX)', how: 'Your bank login' },
-    { id: 'card', name: 'Card', how: 'Credit or debit card' }
+    { id: 'dnqr', name: 'DuitNow QR', how: "Scan with any banking or e-wallet app: Boost, Touch 'n Go, GrabPay, MAE and more", logos: ['duitnow-qr'] },
+    { id: 'fpx', name: 'Online banking (FPX)', how: 'Choose your bank on the next page', logos: ['fpx'] },
+    { id: 'card', name: 'Credit or debit card', how: 'Visa, Mastercard, MyDebit or UnionPay', logos: ['visa', 'mastercard'] },
+    { id: 'tng', name: "Touch 'n Go eWallet", how: 'Opens the TNG eWallet to approve', logos: ['tng'] },
+    { id: 'boost', name: 'Boost', how: 'Opens the Boost app to approve', logos: ['boost'] },
+    { id: 'shopeepay', name: 'ShopeePay', how: 'Opens ShopeePay to approve', logos: ['shopeepay'] },
+    { id: 'grab', name: 'GrabPay', how: 'Opens GrabPay to approve', logos: ['grabpay'] }
   ],
   // Demo checkout methods. Plain names on purpose: no bank or wallet brands, and nothing asks for real card details.
   PAYMENT_METHODS: [

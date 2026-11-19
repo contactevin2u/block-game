@@ -36,7 +36,7 @@ function toClient(u) {
     adventure: j(u.adventure, { unlocked: 1, stages: {} })
   };
 }
-function meResponse(req) { return { user: req.user ? toClient(req.user) : null, sessions: req.user ? auth.sessionCount(req.user.id) : 0, expiredEmail: req.expiredEmail || null, provider: PAY_PROVIDER, paymentsEnabled: PAYMENTS_ENABLED && PAY_PROVIDER !== 'none', demoMode: DEMO_MODE, emailProvider: email.PROVIDER }; }
+function meResponse(req) { return { user: req.user ? toClient(req.user) : null, sessions: req.user ? auth.sessionCount(req.user.id) : 0, expiredEmail: req.expiredEmail || null, provider: PAY_PROVIDER, paymentsEnabled: PAYMENTS_ENABLED && PAY_PROVIDER !== 'none', demoMode: DEMO_MODE, boostMethods: PAY_PROVIDER === 'boost' ? pay.METHODS : undefined, emailProvider: email.PROVIDER }; }
 function fresh(req) { req.user = row('SELECT * FROM users WHERE id = ?', req.user.id); return toClient(req.user); }
 
 async function mail(to, subject, body, link, linkText) { try { await email.send({ to, subject, body, link, linkText }); } catch (e) { console.error('[email] failed:', e.message); } }
@@ -231,7 +231,7 @@ r.post('/orders', needUser, paymentsOpen, auth.rateLimit('orders', 20, 15 * 6000
   const id = 'ord_' + auth.token(6).toUpperCase().replace(/[^A-Z0-9]/g, 'X').slice(0, 8);
   // Boost: the player picks the method in our own picker; one method per Boost page.
   const method = pay.name === 'boost' ? String(req.body.method || '') : null;
-  if (pay.name === 'boost' && !pay.METHODS.includes(method)) return bad(res, 'Pick Boost, Touch \'n Go, Online banking or Card.');
+  if (pay.name === 'boost' && !pay.METHODS.includes(method)) return bad(res, 'Pick a payment method.');
   const o = { id, user_id: u.id, type: item.type, item_id: item.id, name: item.name, price_cents: Math.round(item.price * 100), coins: item.coins || 0, status: 'pending', provider: pay.name, provider_ref: null, reference_id: null, method, created_at: Date.now() };
   if (pay.name === 'boost') {
     // As in AutoCount's portal: the order and its reference are saved BEFORE Boost is asked, so any page Boost
@@ -242,7 +242,7 @@ r.post('/orders', needUser, paymentsOpen, auth.rateLimit('orders', 20, 15 * 6000
       const ck = await pay.createCheckout(o, { baseUrl: baseUrl(req), apiUrl: apiUrl(req), email: u.email });
       o.provider_ref = ck.providerRef;
       run('UPDATE orders SET provider_ref = ? WHERE id = ?', o.provider_ref, o.id);
-      return res.json({ order: orderToClient(o), checkoutUrl: ck.checkoutUrl });
+      return res.json({ order: orderToClient(o), checkoutUrl: ck.checkoutUrl, qr: ck.qr || null, qrExpiresAt: ck.qrExpiresAt || null });
     } catch (e) {
       run('UPDATE orders SET status = ?, last_error = ? WHERE id = ?', 'failed', ('Boost init: ' + e.message).slice(0, 200), o.id);
       console.error('[orders] boost init', o.id, e.message);

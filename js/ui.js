@@ -279,25 +279,81 @@
     });
   };
 
-  // Our own method picker for Boost Connect: one method per Boost page. The player pays on Boost's page.
+  // ---- Boost Connect pay page, laid out like the AALYX one ----------------------------------------------------
+  // The order, then every option Boost Connect has switched on for us (the server's boostMethods), each with its logo.
+  // DuitNow QR is drawn right here and any banking or e-wallet app can scan it; every other option opens Boost's own
+  // secure page (FPX: the player picks the bank there). The item is added only after the server reads the payment
+  // back from Boost, never from this page.
+  function boostMethods() {
+    var on = (root.APP_ENV && root.APP_ENV.boostMethods) || [];
+    return C.BOOST_METHODS.filter(function (m) { return on.indexOf(m.id) >= 0; });
+  }
+  function payLogos(m) {
+    return '<span class="pay-logos" aria-hidden="true">' + (m.logos || []).map(function (l) { return '<img src="img/pay-methods/' + l + '.svg" alt="" width="44" height="28" loading="lazy">'; }).join('') + '</span>';
+  }
+  function payItem(p) { var items = S.catalogue(B.user()); return items.filter(function (i) { return i.type === p[0] && i.id === p[1]; })[0]; }
   screens.paymethod = function (p) {
-    var items = S.catalogue(B.user()), item = items.filter(function (i) { return i.type === p[0] && i.id === p[1]; })[0];
+    var item = payItem(p);
     if (!item) return header('#/shop', 'Shop') + '<h1>Item not found</h1>';
+    var ms = boostMethods();
     return header('#/shop', 'Shop') + '<h1>Pay ' + money(item.price) + '</h1>' +
       '<div class="card order"><div class="row"><span>' + esc(item.name) + '</span><b>' + money(item.price) + '</b></div></div>' +
-      '<p class="eyebrow">Choose how to pay</p>' + C.BOOST_METHODS.map(function (m) { return '<button type="button" class="card method" data-method="' + m.id + '"><b>' + esc(m.name) + '</b><span class="muted small">' + esc(m.how) + ' · you pay on the secure payment page and come back here</span></button>'; }).join('') +
-      '<p class="muted small center">The item is added to your account after the payment is confirmed.</p><a class="link center" href="#/shop">Cancel</a>';
+      '<div id="paybox"><p class="eyebrow">Choose how to pay</p>' +
+      (ms.length ? '<div class="pay-list" role="radiogroup" aria-label="Payment method">' + ms.map(function (m, i) {
+        return '<button type="button" class="pay-opt" role="radio" aria-checked="' + (i === 0) + '" data-method="' + m.id + '">' +
+          '<span class="pay-dot" aria-hidden="true"></span><span class="pay-text"><b>' + esc(m.name) + '</b><span class="muted small">' + esc(m.how) + '</span></span>' + payLogos(m) + '</button>';
+      }).join('') + '</div>' +
+      '<button type="button" class="btn btn-primary" data-pay>Pay ' + money(item.price) + '</button>' : '<p class="lead">Payments are not available right now.</p>') +
+      '<p class="muted small center">Payments are processed securely by Boost Connect. The item is added to your account as soon as the payment is confirmed.</p>' +
+      '<a class="link center" href="#/shop">Cancel</a></div>';
   };
   screens.paymethod.bind = function (p) {
-    var items = S.catalogue(B.user()), item = items.filter(function (i) { return i.type === p[0] && i.id === p[1]; })[0];
+    var item = payItem(p);
     if (!item) return;
-    $('[data-method]').forEach(function (b) { b.addEventListener('click', function () {
-      $('[data-method]').forEach(function (x) { x.disabled = true; });
-      b.querySelector('b').textContent = 'Opening the payment page';
-      S.createOrder(item, b.getAttribute('data-method')).then(function (d) { location.href = d.checkoutUrl; })
-        .catch(function (err) { $('[data-method]').forEach(function (x) { x.disabled = false; }); b.querySelector('b').textContent = C.BOOST_METHODS.filter(function (m) { return m.id === b.getAttribute('data-method'); })[0].name; toast(err.message, 'warn'); });
+    var first = boostMethods()[0], chosen = first ? first.id : null;
+    $$('[data-method]').forEach(function (b) { b.addEventListener('click', function () {
+      chosen = b.getAttribute('data-method');
+      $$('[data-method]').forEach(function (x) { x.setAttribute('aria-checked', String(x === b)); });
     }); });
+    var pay = $('[data-pay]');
+    if (!pay) return;
+    pay.addEventListener('click', function () {
+      if (!chosen) return;
+      pay.disabled = true; pay.textContent = chosen === 'dnqr' ? 'Making your QR' : 'Opening the payment page';
+      S.createOrder(item, chosen).then(function (d) {
+        if (d.qr) return showQr(item, d);
+        location.href = d.checkoutUrl;
+      }).catch(function (err) { pay.disabled = false; pay.textContent = 'Pay ' + money(item.price); toast(err.message, 'warn'); });
+    });
   };
+  // DuitNow QR on this page: the QR, the amount, a five-minute countdown, and a check every 3 seconds. When the server
+  // has read the payment back from Boost as paid, the player is taken to the result page.
+  function showQr(item, d) {
+    var box = $('#paybox'); if (!box) return;
+    var orderId = d.order.id, until = d.qrExpiresAt || (Date.now() + 5 * 60000), done = false;
+    box.innerHTML = '<div class="card pay-qr"><p class="eyebrow">DuitNow QR</p><img src="' + esc(d.qr) + '" alt="DuitNow QR code to pay ' + esc(money(item.price)) + '" width="240" height="240">' +
+      '<p class="lead"><b>' + money(item.price) + '</b> to ' + esc(C.GAME_NAME || 'Linezu') + '</p>' +
+      '<p class="muted small">Open any banking or e-wallet app (Boost, Touch \'n Go, GrabPay, MAE and more), scan this code and approve. On a phone, take a screenshot and open it from your banking app.</p>' +
+      '<p id="qrtime" class="small">This code works for 5:00</p><p id="qrstate" class="muted small">Waiting for your payment</p>' +
+      '<a class="link center" href="#/pay/return/' + encodeURIComponent(orderId) + '">I have paid</a></div>' +
+      '<a class="link center" href="#/shop">Back to shop</a>';
+    (function tick() {
+      if (done || !$('#qrtime')) return;
+      var left = Math.max(0, until - Date.now()), mm = Math.floor(left / 60000), ss = Math.floor((left % 60000) / 1000);
+      $('#qrtime').textContent = left > 0 ? 'This code works for ' + mm + ':' + (ss < 10 ? '0' : '') + ss : 'This code has expired. Go back and choose DuitNow QR again for a new one. If you already paid, the item is added automatically.';
+      if (left <= 0) { var img = $('.pay-qr img'); if (img) img.classList.add('expired'); }
+      setTimeout(tick, 1000);
+    })();
+    (function check(n) {
+      if (done || !$('#qrstate')) return;
+      S.getOrder(orderId).then(function (o) {
+        if (!o || !$('#qrstate')) return;
+        if (o.status === 'paid' || o.status === 'review') { done = true; return go('#/pay/return/' + orderId); }
+        if (o.status === 'failed') { done = true; $('#qrstate').textContent = 'This payment did not go through. Nothing was charged.'; return; }
+        if (Date.now() < until + 15 * 60000 && n < 400) setTimeout(function () { check(n + 1); }, 3000);
+      }).catch(function () { setTimeout(function () { check(n + 1); }, 5000); });
+    })(0);
+  }
 
   screens.payreturn = function (p) {
     return '<div class="center pad"><div class="ring spin">&#8635;</div><h1 id="h">Checking your payment</h1><p class="lead" id="msg">Waiting for the bank to confirm. This usually takes a few seconds.</p><div id="done" hidden><a class="btn btn-primary" href="#/shop">Back to shop</a><a class="link center" href="#/lobby">Go to lobby</a></div></div>';

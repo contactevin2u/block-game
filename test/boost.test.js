@@ -15,6 +15,8 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const inits = [];                 // every init received: { ref, body, authOk, pathSigned, created }
 const refs = new Map();           // referenceId -> read-back record
 let failInit = null;              // referenceId to answer 500 for
+let badQr = false;                // next DuitNow QR init answers something that is not a PNG
+const PNG_B64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
 function expectedAuth(method, bodyBytes, pathToSign) {
   const mac = crypto.createHmac('sha256', SECRET).update(method + pathToSign + bodyBytes).digest('base64');
   return 'Basic ' + Buffer.from(CLIENT_ID + ':' + mac).toString('base64');
@@ -36,6 +38,7 @@ const fake = http.createServer((req, res) => {
       const uuid = 'uuid-' + crypto.randomBytes(4).toString('hex');
       refs.set(b.referenceId, { status: 'pending', uuid, amount: b.amount, currency: 'MYR', reversed: false });
       res.setHeader('Content-Type', 'application/json');
+      if (b.paymentMethod === 'dnqr') { const q = badQr ? Buffer.from('not a png').toString('base64') : PNG_B64; badQr = false; res.end(JSON.stringify({ uuid, referenceId: b.referenceId, qrBase64: q })); return; }
       res.end(JSON.stringify({ uuid, paymentUrl: 'https://pay.fake-boost.test/p/' + uuid, referenceId: b.referenceId }));
       return;
     }
@@ -110,7 +113,7 @@ function client(s) {
   check('server up with payments off', await waitUp(s));
   let call = client(s);
   await call('POST', '/auth/signup', { email: 'off@example.com', password: 'password1' });
-  check('orders refused while the switch is off', (await call('POST', '/orders', { type: 'theme', id: 'neon', method: 'boost' })).status === 403);
+  check('orders refused while the switch is off', (await call('POST', '/orders', { type: 'theme', id: 'neon', method: 'card' })).status === 403);
   s.stop();
 
   // ---- main flow ----
@@ -124,6 +127,7 @@ function client(s) {
   r = await call('POST', '/orders', { type: 'theme', id: 'neon', method: 'tng', price: 0.01, amount: '0.01' });
   check('order created, price from the catalogue, sent to Boost page', r.status === 200 && r.d.order.item.price === 12.99 && r.d.checkoutUrl.startsWith('https://pay.fake-boost.test/'));
   const order = r.d.order;
+  let st;
   const init = inits[inits.length - 1];
   check('init signed over the bare path, not /gateway', init.authOk && !init.signedWithGateway);
   check('headers Accept and Content-Type are application/json', init.headersOk);
@@ -137,6 +141,27 @@ function client(s) {
   r = await call('POST', '/orders', { type: 'theme', id: 'paper', method: 'fpx' });
   const okOrder = r.d.order;
   check('each attempt uses a fresh reference', inits.length === before + 1 && inits[before].ref !== order.referenceId);
+
+  // ---- the pay page's options: DuitNow QR first, then FPX, card, TNG; wallet pages only when switched on ----
+  const me0 = (await call('GET', '/me')).d;
+  check('server lists the switched-on options, DuitNow QR first', JSON.stringify(me0.boostMethods) === JSON.stringify(['dnqr', 'fpx', 'card', 'tng']));
+  check('Boost wallet page is refused while not switched on', (await call('POST', '/orders', { type: 'coins', id: 'coins-s', method: 'boost' })).status === 400);
+  // ---- DuitNow QR: Boost returns the QR picture, there is no page and no returnUrl ----
+  r = await call('POST', '/orders', { type: 'coins', id: 'coins-s', method: 'dnqr' });
+  const qrInit = inits[inits.length - 1];
+  check('DuitNow QR order returns a PNG QR and no page', r.status === 200 && /^data:image\/png;base64,/.test(r.d.qr || '') && !r.d.checkoutUrl);
+  check('DuitNow QR init asks withQrCode and sends no returnUrl', qrInit.body.paymentMethod === 'dnqr' && qrInit.body.withQrCode === true && !('returnUrl' in qrInit.body) && /\/api\/payments\/boost\/callback$/.test(qrInit.body.callbackUrl));
+  check('DuitNow QR lives about five minutes', Math.abs(r.d.qrExpiresAt - (Date.now() + 290000)) < 15000);
+  const qrOrder = r.d.order, coinsQr = (await call('GET', '/me')).d.user.coins;
+  st = (await call('GET', '/orders/' + qrOrder.id)).d;
+  check('DuitNow QR waiting: nothing given yet', st.order.status === 'pending' && st.user.coins === coinsQr);
+  refs.get(qrOrder.referenceId).status = 'succeeded';
+  await sleep(2100); // the pay page polls GET /orders/:id; the callback/return gap is 2 s
+  st = (await call('GET', '/orders/' + qrOrder.id)).d;
+  check('DuitNow QR paid: read back once and given once', st.order.status === 'paid' && st.user.coins === coinsQr + 1000);
+  badQr = true;
+  r = await call('POST', '/orders', { type: 'coins', id: 'coins-s', method: 'dnqr' });
+  check('a QR that is not a PNG is refused', r.status === 502);
 
   // a duplicate-reference 500 is not retried: the fake answers 500 to the next init, and the server must send
   // that reference exactly once and report failure to the player; the next Buy gets a new reference.
@@ -154,7 +179,7 @@ function client(s) {
 
   // a callback alone grants nothing
   r = await call('POST', '/payments/boost/callback', { referenceId: order.referenceId }, true);
-  let st = (await call('GET', '/orders/' + order.id)).d;
+  st = (await call('GET', '/orders/' + order.id)).d;
   check('callback replies 200 and grants nothing while Boost says pending', r.status === 200 && st.order.status === 'pending' && !st.user.purchases.themes.includes('neon'));
 
   // success: read-back agrees on everything
@@ -175,7 +200,7 @@ function client(s) {
 
   // REVIEW cases: succeeded but something disagrees
   async function reviewCase(name, mutate, themeId) {
-    const o = (await call('POST', '/orders', { type: 'theme', id: themeId, method: 'boost' })).d.order;
+    const o = (await call('POST', '/orders', { type: 'theme', id: themeId, method: 'card' })).d.order;
     const rec = refs.get(o.referenceId); rec.status = 'succeeded'; mutate(rec);
     await call('POST', '/payments/boost/callback', { referenceId: o.referenceId }, true); await sleep(300);
     const after = (await call('GET', '/orders/' + o.id)).d;
@@ -187,7 +212,7 @@ function client(s) {
   // for currency and reversed we need fresh themes; use coins packs instead (never "owned")
   async function reviewCoins(name, mutate) {
     const coinsBefore = (await call('GET', '/me')).d.user.coins;
-    const o = (await call('POST', '/orders', { type: 'coins', id: 'coins-s', method: 'boost' })).d.order;
+    const o = (await call('POST', '/orders', { type: 'coins', id: 'coins-s', method: 'card' })).d.order;
     const rec = refs.get(o.referenceId); rec.status = 'succeeded'; mutate(rec);
     await call('POST', '/payments/boost/callback', { referenceId: o.referenceId }, true); await sleep(300);
     const after = (await call('GET', '/orders/' + o.id)).d;
@@ -198,7 +223,7 @@ function client(s) {
   // read-back shapes AutoCount's portal accepts: no currency field, amount as a string
   async function paidCoins(name, mutate) {
     const coinsBefore = (await call('GET', '/me')).d.user.coins;
-    const o = (await call('POST', '/orders', { type: 'coins', id: 'coins-s', method: 'boost' })).d.order;
+    const o = (await call('POST', '/orders', { type: 'coins', id: 'coins-s', method: 'card' })).d.order;
     const rec = refs.get(o.referenceId); rec.status = 'succeeded'; mutate(rec);
     await call('POST', '/payments/boost/callback', { referenceId: o.referenceId }, true); await sleep(300);
     const after = (await call('GET', '/orders/' + o.id)).d;
@@ -230,6 +255,11 @@ function client(s) {
   await sleep(1500);
   check('and only once', (await call('GET', '/me')).d.user.coins === coinsBefore + 3200);
 
+  s.stop();
+  s = startServer(Object.assign({}, boostEnv, { BOOST_EXTRA_METHODS: 'boost, grab,unknown,boost' }));
+  check('server up with extra wallet pages switched on', await waitUp(s));
+  const me1 = (await client(s)('GET', '/me')).d;
+  check('extra wallet pages listed once, unknown names ignored', JSON.stringify(me1.boostMethods) === JSON.stringify(['dnqr', 'fpx', 'card', 'tng', 'boost', 'grab']));
   s.stop(); fake.close();
   console.log(fails ? fails + ' FAILED' : 'ALL PASSED');
   process.exit(fails ? 1 : 0);

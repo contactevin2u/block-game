@@ -241,3 +241,19 @@ kbd { display: inline-flex; align-items: center; justify-content: center; min-wi
   .mode-battle .player[data-player="1"] .side-left .stats, .mode-battle .player[data-player="1"] .side-right { display: none; }
 }
 @media (max-width: 420px) { .modes { grid-template-columns: 1fr 1fr; } .mode { min-height: 96px; padding: 12px; } .mode b { font-size: 16px; } }
+
+/* Pay page (Boost Connect), laid out like the AALYX pay page */
+#paybox { display: flex; flex-direction: column; gap: 16px; }
+.pay-list { display: grid; gap: 10px; }
+.pay-opt { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 64px; padding: 12px 14px; text-align: left; font: inherit; color: var(--ink); background: var(--surface); border: 2px solid var(--line); border-radius: 8px; cursor: pointer; }
+.pay-opt:hover { border-color: var(--muted); }
+.pay-opt[aria-checked="true"] { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-bg) 25%, transparent); }
+.pay-dot { flex: 0 0 18px; height: 18px; border-radius: 50%; border: 2px solid var(--line); }
+.pay-opt[aria-checked="true"] .pay-dot { border-color: var(--accent); background: radial-gradient(var(--accent) 45%, transparent 50%); }
+.pay-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+.pay-logos { display: flex; gap: 6px; flex-shrink: 0; }
+.pay-logos img { width: 44px; height: 28px; object-fit: contain; background: #fff; border: 1px solid #e3e5ea; border-radius: 4px; padding: 2px 4px; }
+.pay-qr { align-items: center; text-align: center; }
+.pay-qr img { width: 240px; height: 240px; max-width: 100%; background: #fff; padding: 8px; border-radius: 8px; image-rendering: pixelated; }
+.pay-qr img.expired { opacity: .25; }
+@media (max-width: 420px) { .pay-logos img { width: 36px; height: 24px; } .pay-opt { gap: 10px; padding: 10px 12px; } }

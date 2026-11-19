@@ -133,7 +133,12 @@ function isReversed(v) {
 // init with a fresh LZ- reference each attempt; the read-back is the only thing that decides a payment.
 const boost = {
   name: 'boost',
-  METHODS: ['boost', 'tng', 'fpx', 'card'],
+  // DuitNow QR first, as on the AALYX pay page: one QR that any banking or e-wallet app can scan. Then Boost's own
+  // hosted pages: FPX (the player picks the bank on Boost's page), card and Touch 'n Go. The Boost, ShopeePay and
+  // GrabPay wallet pages are offered only when BOOST_EXTRA_METHODS names them: Boost's test profile refused all
+  // three, so each is switched on only after a live check says the merchant has it.
+  METHODS: ['dnqr', 'fpx', 'card', 'tng'].concat(String(process.env.BOOST_EXTRA_METHODS || '').split(',').map((s) => s.trim().toLowerCase()).filter((m, i, a) => ['boost', 'shopeepay', 'grab'].includes(m) && a.indexOf(m) === i)),
+  QR_TTL_MS: 5 * 60000, // a DuitNow QR lives five minutes at Boost
   base() { return (process.env.BCPG_BASE_URL || '').replace(/\/+$/, ''); },
   // The signed path is the bare /v1/... path, without the /gateway part of the base URL.
   sign(method, path, body) {
@@ -159,20 +164,30 @@ const boost = {
       ',"currency":"MYR","created":' + JSON.stringify(created) +
       ',"description":' + JSON.stringify(this.description(order.name)) +
       ',"paymentMethod":' + JSON.stringify(order.method) +
-      ',"returnUrl":' + JSON.stringify(ctx.baseUrl + '/api/payments/boost/return?ref=' + encodeURIComponent(order.reference_id)) +
+      // DuitNow QR: Boost returns the QR picture (withQrCode) and there is no page to come back from. Every other
+      // method opens Boost's page, which sends the player back to returnUrl.
+      (order.method === 'dnqr' ? ',"withQrCode":true' : ',"returnUrl":' + JSON.stringify(ctx.baseUrl + '/api/payments/boost/return?ref=' + encodeURIComponent(order.reference_id))) +
       ',"callbackUrl":' + JSON.stringify(ctx.apiUrl + '/api/payments/boost/callback') + '}';
   },
   async createCheckout(order, ctx) {
-    if (!this.METHODS.includes(order.method)) throw new Error('Pick Boost, Touch \'n Go, Online banking or Card.');
+    if (!this.METHODS.includes(order.method)) throw new Error('Pick a payment method.');
     if (!/^https:\/\//.test(ctx.baseUrl) || !/^https:\/\//.test(ctx.apiUrl)) throw new Error('BASE_URL and API_URL must be https for Boost');
     order.reference_id = order.reference_id || this.reference(order.id);
     if (order.price_cents <= 0) throw new Error('Amount must be more than 0');
     const body = this.initBody(order, ctx);
     const r = await this.call('POST', '/v1/payments/init', body); // never retried with the same reference
     if (r.status !== 200 || !r.json) throw new Error('Boost init failed ' + r.status + (r.text ? ': ' + r.text.slice(0, 200) : ' (no body)'));
-    if (r.json.referenceId !== order.reference_id) throw new Error('Boost returned a different referenceId');
-    if (!/^https:\/\//.test(String(r.json.paymentUrl || ''))) throw new Error('Boost paymentUrl is not https');
+    // An answer for a different reference would be somebody else's payment. (A reply without the echo is accepted,
+    // as our live integration does.)
+    if (r.json.referenceId && r.json.referenceId !== order.reference_id) throw new Error('Boost returned a different referenceId');
     if (!r.json.uuid) throw new Error('Boost reply has no uuid');
+    if (order.method === 'dnqr') {
+      const b64 = String(r.json.qrBase64 || '').trim();
+      let png = null; try { png = Buffer.from(b64, 'base64'); } catch (e) {}
+      if (!b64 || !png || png.length < 8 || png.toString('latin1', 0, 4) !== '\x89PNG') throw new Error('Boost QR is not a PNG picture');
+      return { checkoutUrl: null, qr: 'data:image/png;base64,' + png.toString('base64'), qrExpiresAt: Date.now() - 10000 + this.QR_TTL_MS, providerRef: String(r.json.uuid), referenceId: order.reference_id };
+    }
+    if (!/^https:\/\//.test(String(r.json.paymentUrl || ''))) throw new Error('Boost paymentUrl is not https');
     return { checkoutUrl: r.json.paymentUrl, providerRef: String(r.json.uuid), referenceId: order.reference_id };
   },
   // Read-back. Returns 'paid' only when everything agrees; 'review' when Boost says succeeded but something does not.

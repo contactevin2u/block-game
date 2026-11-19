@@ -40,6 +40,7 @@
         if (d.emailProvider) env.emailProvider = d.emailProvider;
         if (d.provider) env.provider = d.provider;
         env.paymentsEnabled = !!d.paymentsEnabled; env.demoMode = !!d.demoMode;
+        if (d.boostMethods) env.boostMethods = d.boostMethods;
         return current;
       }).catch(function () { current = guest(); return current; });
     },

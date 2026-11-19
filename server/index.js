@@ -41,7 +41,7 @@ app.use((req, res, next) => {
 // Tells the front end to use the API instead of the browser-only backend.
 app.get('/env.js', (req, res) => {
   res.type('application/javascript').set('Cache-Control', 'no-store');
-  res.send('window.APP_ENV=' + JSON.stringify({ mode: 'server', provider: PAY, paymentsEnabled: PAYMENTS_ENABLED && PAY !== 'none', demoMode: DEMO_MODE, emailProvider: EMAIL, gameName: process.env.GAME_NAME || null }) + ';');
+  res.send('window.APP_ENV=' + JSON.stringify({ mode: 'server', provider: PAY, paymentsEnabled: PAYMENTS_ENABLED && PAY !== 'none', demoMode: DEMO_MODE, boostMethods: PAY === 'boost' ? require('./payments').boost.METHODS : undefined, emailProvider: EMAIL, gameName: process.env.GAME_NAME || null }) + ';');
 });
 
 let realtime = null;
