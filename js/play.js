@@ -19,6 +19,15 @@
       (opts.attack ? '<div class="box attack"><span class="box-label">Sent</span><b class="sent">0</b><span class="box-label">Taken</span><b class="taken">0</b></div>' : '') + '</div></div>';
   }
 
+  // Key guide for one player. Keys are listed in the order players read them: move, drops, rotate, hold.
+  var KEY_LABELS = {
+    p1: [['&#8592; &#8594;', 'Move'], ['&#8595;', 'Soft drop'], ['Space', 'Hard drop'], ['Z / X', 'Rotate'], ['C', 'Hold']],
+    p2: [['A / D', 'Move'], ['S', 'Soft drop'], ['W', 'Hard drop'], ['Q / E', 'Rotate'], ['F', 'Hold']]
+  };
+  function keyGuide(who, title) {
+    return '<div class="keyguide"><b>' + esc(title) + '</b>' + KEY_LABELS[who].map(function (k) { return '<span class="kv"><kbd>' + k[0] + '</kbd>' + esc(k[1]) + '</span>'; }).join('') + '</div>';
+  }
+
   function touchControls() {
     return '<div class="touch-controls" aria-label="Touch controls">' +
       '<button type="button" class="tc" data-act="left" aria-label="Move left">&#9664;</button>' +
@@ -57,7 +66,7 @@
       html += '<div class="equip-bar">' + C.EQUIPMENT.map(function (e) { return '<button type="button" class="equip" data-equip="' + e.id + '" title="' + esc(e.desc) + '"><span class="equip-key">' + e.key + '</span><span class="equip-name">' + esc(e.name) + '</span><span class="equip-count" data-count="' + e.id + '">0</span></button>'; }).join('') + '</div>';
     }
     if (m !== 'local') html += touchControls();
-    if (m === 'local') html += '<p class="local-help">Player 1: arrows, Space drop, Z X rotate, C hold. Player 2: A D move, S soft drop, W hard drop, Q E rotate, F hold.</p>';
+    if (m === 'local') html += '<div class="local-help">' + keyGuide('p2', 'Player 2 · left side of keyboard') + keyGuide('p1', 'Player 1 · right side of keyboard') + '</div>';
     html += '<div class="overlay" hidden></div></div>';
     this.root.innerHTML = html;
     this.el = this.root.firstElementChild;
@@ -129,7 +138,22 @@
     this.last = performance.now();
     var self = this;
     this.raf = requestAnimationFrame(function step(now) { if (!self.running) return; self.frame(now); self.raf = requestAnimationFrame(step); });
-    this.showCountdown();
+    if (m === 'local' && !this.localIntroShown) this.showLocalIntro(); else this.showCountdown();
+  };
+
+  // Local 2-player: explain both key sets before the first match, then count down.
+  GameScreen.prototype.showLocalIntro = function () {
+    var self = this;
+    this.paused = true; this.localIntroShown = true;
+    this.setOverlay('<div class="panel wide"><div class="panel-head"><p class="eyebrow">Local 2-player</p><h2>Controls</h2></div>' +
+      '<p class="muted small">Both players share this keyboard at the same time. Player 2 sits on the left, Player 1 on the right.</p>' +
+      '<div class="keyguide-row">' + keyGuide('p2', 'Player 2 · left board') + keyGuide('p1', 'Player 1 · right board') + '</div>' +
+      '<p class="muted small">When one player tops out, the other keeps playing. The longer survivor wins.</p>' +
+      '<div class="panel-actions"><button type="button" class="btn btn-primary" data-do="start">Start match</button><button type="button" class="link-btn" data-do="quit">Back to battle</button></div></div>');
+    var onKey = function (e) { if (e.key === 'Enter') { e.preventDefault(); begin(); } };
+    var begin = function () { window.removeEventListener('keydown', onKey); self.hideOverlay(); self.showCountdown(); };
+    window.addEventListener('keydown', onKey);
+    this.bindOverlay({ start: begin, quit: function () { window.removeEventListener('keydown', onKey); self.exit(); } });
   };
 
   GameScreen.prototype.rand01 = function (n) { return ((n * 9301 + 49297) % 233280) / 233280; };
@@ -400,8 +424,12 @@
     if (!this.paused) {
       this.paused = true;
       this.players.forEach(function (p) { p.game.setSoftDrop(false); });
-      this.setOverlay('<div class="panel"><div class="panel-head"><p class="eyebrow">Take a breath</p><h2>Paused</h2></div><div class="panel-actions"><button type="button" class="btn btn-primary" data-do="resume">Resume</button><button type="button" class="btn btn-secondary" data-do="restart">Restart</button><button type="button" class="link-btn" data-do="quit">Quit to lobby</button></div>' +
-        '<p class="muted small foot-note">Arrows move · Space hard drop · Z X rotate · C hold · Esc pause</p></div>');
+      var keys = this.mode === 'local'
+        ? '<div class="keyguide-row">' + keyGuide('p2', 'Player 2') + keyGuide('p1', 'Player 1') + '</div>'
+        : (isTouch ? '<p class="muted small foot-note">Swipe sideways to move · tap to rotate · flick down to drop · or use the buttons</p>' : '<div class="keyguide-row">' + keyGuide('p1', 'Keyboard') + '</div>');
+      this.setOverlay('<div class="panel' + (this.mode === 'local' ? ' wide' : '') + '"><div class="panel-head"><p class="eyebrow">Take a breath</p><h2>Paused</h2></div>' + keys +
+        '<div class="panel-actions"><button type="button" class="btn btn-primary" data-do="resume">Resume</button><button type="button" class="btn btn-secondary" data-do="restart">Restart</button><button type="button" class="link-btn" data-do="quit">' + (this.mode === 'local' || this.mode === 'battle' ? 'Quit to battle' : 'Quit to lobby') + '</button></div>' +
+        '<p class="muted small foot-note">Esc or P pauses</p></div>');
       var self = this;
       this.bindOverlay({ resume: function () { self.hideOverlay(); self.paused = false; self.last = performance.now(); }, restart: function () { self.restart(); }, quit: function () { if (!self.saved) self.saveRun(self.players[0].game, 'quit'); self.exit(); } });
     } else { this.hideOverlay(); this.paused = false; this.last = performance.now(); }

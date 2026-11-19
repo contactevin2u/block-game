@@ -15,6 +15,8 @@
   function fmtTime(t) { t = Math.floor(t || 0); return Math.floor(t / 60) + ':' + ('0' + (t % 60)).slice(-2); }
 
   function isLocal() { return !(root.APP_ENV && root.APP_ENV.mode === 'server'); }
+  // Local 2-player needs a physical keyboard and room for two boards: no touch devices, no narrow windows.
+  function canLocal() { var touch = window.matchMedia && window.matchMedia('(pointer: coarse)').matches; return !touch && window.innerWidth >= 900; }
   function testTools() { return isLocal() || (root.APP_ENV && root.APP_ENV.emailProvider === 'console'); }
   function applyAppearance(mode) {
     var el = document.documentElement;
@@ -192,7 +194,10 @@
   screens.battlequick = function () { return '<div id="game"></div>'; };
   screens.battlequick.bind = function () { current = root.Play.start($('#game'), { mode: 'battle', onExit: function () { go('#/battle'); } }); };
   screens.battlelocal = function () { return '<div id="game"></div>'; };
-  screens.battlelocal.bind = function () { current = root.Play.start($('#game'), { mode: 'local', onExit: function () { go('#/battle'); } }); };
+  screens.battlelocal.bind = function () {
+    if (!canLocal()) { toast('Local 2-player needs a PC with a keyboard.', 'warn'); return go('#/battle'); }
+    current = root.Play.start($('#game'), { mode: 'local', onExit: function () { go('#/battle'); } });
+  };
 
   screens.shop = function (p) {
     var tab = p[0] || 'themes', u = B.user(), items = S.catalogue(u);
@@ -384,10 +389,10 @@
       '<button type="button" class="btn btn-primary stack" id="quick">Quick match<small>1 v 1 ranked · against the computer in this build</small></button>' +
       '<button type="button" class="btn btn-secondary stack" id="room">Create a room<small>Invite friends with a code or link</small></button>' +
       '<div class="field"><label for="code">Join a friend\'s room</label><div class="row gap"><input class="input code" id="code" maxlength="6" placeholder="Room code" autocomplete="off"><button type="button" class="btn btn-secondary slim" id="join">Join</button></div><p class="err" data-err="code"></p></div>' +
-      (window.innerWidth >= 900 ? '<a class="btn btn-secondary stack" href="#/battle/local">Local 2-player<small>Two players on this keyboard</small></a>' : '') +
+      (canLocal() ? '<a class="btn btn-secondary stack" href="#/battle/local">Local 2-player<small>Two players on this keyboard</small></a>' : '<p class="muted small center">Local 2-player needs a PC with a keyboard.</p>') +
       '</div>' +
       '<div id="searching" hidden class="card center"><div class="dots"><i></i><i></i><i></i></div><h2>Finding an opponent</h2><p class="muted" id="search-txt">0:00 · rating ' + rating + ' ± 100</p><p class="muted small">The range widens every 10 seconds. After 60 seconds you get a bot match instead.</p><button type="button" class="btn btn-danger" id="cancel">Cancel</button></div>' +
-      '<div id="online" hidden class="notice"><b>Online rooms arrive in Phase 2</b><p>Rooms with a code and link need the realtime server, which is built after single player, shop and accounts are live. In this test build you can play Quick match against the computer' + (window.innerWidth >= 900 ? ' or Local 2-player on one keyboard' : '') + '.</p><button type="button" class="link-btn" id="online-ok">OK</button></div>' +
+      '<div id="online" hidden class="notice"><b>Online rooms arrive in Phase 2</b><p>Rooms with a code and link need the realtime server, which is built after single player, shop and accounts are live. In this build you can play Quick match against the computer' + (canLocal() ? ' or Local 2-player on one keyboard' : '') + '.</p><button type="button" class="link-btn" id="online-ok">OK</button></div>' +
       '<p class="muted small center">Battle is cosmetics only. Equipment from Adventure never applies here.</p>';
   };
   screens.battle.bind = function () {

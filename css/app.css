@@ -171,7 +171,15 @@ kbd { display: inline-flex; align-items: center; justify-content: center; min-wi
 .equip-bar { display: flex; gap: 6px; padding: 6px 8px; overflow-x: auto; }
 .equip { flex: 1; min-width: 64px; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 6px 4px; border-radius: 6px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); cursor: pointer; font: inherit; }
 .equip.empty { opacity: .45; } .equip-key { font-family: var(--font-display); font-weight: 700; font-size: 12px; color: var(--accent); } .equip-name { font-size: 11px; } .equip-count { font-size: 11px; color: var(--muted); }
-.local-help { text-align: center; color: var(--muted); font-size: 13px; padding: 6px 12px; }
+.local-help { display: flex; justify-content: center; gap: 24px; flex-wrap: wrap; padding: 6px 12px 10px; }
+.keyguide { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; font-size: 13px; color: var(--muted); }
+.keyguide b { width: 100%; font-family: var(--font-display); font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--ink); }
+.keyguide .kv { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.keyguide kbd { min-width: 26px; height: 24px; font-size: 11px; }
+.keyguide-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; text-align: left; }
+.keyguide-row .keyguide { align-content: flex-start; }
+.panel.wide { max-width: 560px; }
+@media (max-width: 600px) { .keyguide-row { grid-template-columns: 1fr; } }
 .overlay { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 16px; background: rgba(5, 8, 20, .7); backdrop-filter: blur(5px); -webkit-backdrop-filter: blur(5px); z-index: 5; }
 .overlay[hidden] { display: none; }
 .panel { width: 100%; max-width: 380px; max-height: 94vh; overflow-y: auto; background: var(--panel-bg, var(--surface)); border: 1px solid var(--panel-line, var(--line)); border-radius: 16px; padding: 28px 24px 22px; display: flex; flex-direction: column; gap: 20px; text-align: center; box-shadow: 0 24px 64px rgba(0, 0, 0, .55), 0 0 0 1px rgba(0,0,0,.2); animation: rise .28s cubic-bezier(.2,.8,.2,1); color: var(--ink); }
