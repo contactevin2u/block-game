@@ -109,7 +109,7 @@
   screens.forgot = function () {
     return header('#/login', 'Back to log in') + '<h1>Reset your password</h1><p class="lead">Enter the email you signed up with. We will send you a link to choose a new password.</p>' +
       '<form id="f" novalidate>' + field('email', 'Email', 'email', 'you@example.com') + '<button class="btn btn-primary" type="submit">Send reset link</button><p class="muted small center">The link works for ' + C.RESET_LINK_MINUTES + ' minutes.</p></form>' +
-      '<div id="sent" hidden class="center"><div class="ring">&#9993;</div><h2>Check your email</h2><p class="muted">We sent a password reset link to <b id="sent-to"></b>. If it is not there in a minute, check your spam folder.</p><a class="btn btn-primary" href="#/inbox">Open the Test inbox</a><button type="button" class="btn btn-secondary" id="resend">Resend email</button></div>' + inboxLink();
+      '<div id="sent" hidden class="center"><div class="ring">&#9993;</div><h2>Check your email</h2><p class="muted">We sent a password reset link to <b id="sent-to"></b>. If it is not there in a minute, check your spam folder.</p>' + (testTools() ? '<a class="btn btn-primary" href="#/inbox">Open the Test inbox</a>' : '<a class="btn btn-primary" href="#/login">Back to log in</a>') + '<button type="button" class="btn btn-secondary" id="resend">Resend email</button></div>' + inboxLink();
   };
   screens.forgot.bind = function () {
     var f = $('#f');
@@ -152,6 +152,7 @@
     return header('#/', 'Back') + '<h1>Test inbox</h1><p class="lead">In the real game these go to the player\'s email. Here they are listed so you can test the links.</p><div id="mails"><p class="muted">Loading</p></div>';
   };
   screens.inbox.bind = function () {
+    if (!testTools()) { toast('Emails are sent to your real inbox now.'); return go('#/'); }
     Promise.resolve(B.emails()).then(function (list) {
       var box = $('#mails'); if (!box) return;
       if (list === null) { box.innerHTML = '<div class="notice"><b>Real email is on</b><p>This server sends emails to the player\'s real address, so there is nothing to show here.</p></div>'; return; }
@@ -324,7 +325,7 @@
       '<div class="card"><p class="eyebrow">Current email</p><b>' + esc(u.email) + '</b></div>' +
       '<form id="f" novalidate>' + field('email', 'New email', 'email', 'new@example.com') + field('password', 'Current password', 'password', 'To confirm it is you') +
       '<button class="btn btn-primary" type="submit">Send confirmation link</button><p class="muted small center">We email a link to the new address. Your current email keeps working until you confirm.</p></form>' +
-      '<div id="sent" hidden class="center"><div class="ring">&#9993;</div><h2>Confirm your new email</h2><p class="muted">We sent a confirmation link to <b id="sent-to"></b>. Open it within ' + C.RESET_LINK_MINUTES + ' minutes. Until then you still log in with ' + esc(u.email) + '.</p><a class="btn btn-primary" href="#/inbox">Open the Test inbox</a><a class="link center" href="#/settings">Done</a></div>';
+      '<div id="sent" hidden class="center"><div class="ring">&#9993;</div><h2>Confirm your new email</h2><p class="muted">We sent a confirmation link to <b id="sent-to"></b>. Open it within ' + C.RESET_LINK_MINUTES + ' minutes. Until then you still log in with ' + esc(u.email) + '.</p>' + (testTools() ? '<a class="btn btn-primary" href="#/inbox">Open the Test inbox</a><a class="link center" href="#/settings">Done</a>' : '<a class="btn btn-primary" href="#/settings">Done</a>') + '</div>';
   };
   screens.settingsemail.bind = function () {
     $('#f').addEventListener('submit', function (e) {
