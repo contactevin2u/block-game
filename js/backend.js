@@ -216,7 +216,7 @@
       else { db.runs.unshift(run); db.runs = db.runs.slice(0, 2000); }
       current.gamesPlayed = (current.gamesPlayed || 0) + 1;
       current.coins += run.coins || 0;
-      if (run.mode === 'classic' && !run.continued && !run.usedEquipment && run.score > current.bestScore) current.bestScore = run.score;
+      if (run.mode === 'classic' && run.score > current.bestScore) current.bestScore = run.score;
       if (run.level > (current.bestLevel || 1)) current.bestLevel = run.level;
       persist();
       return run;

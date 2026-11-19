@@ -68,7 +68,7 @@
       var coins = run.coins || 0;
       current.gamesPlayed = (current.gamesPlayed || 0) + 1;
       current.coins += coins;
-      if (run.mode === 'classic' && !run.continued && !run.usedEquipment && run.score > current.bestScore) current.bestScore = run.score;
+      if (run.mode === 'classic' && run.score > current.bestScore) current.bestScore = run.score;
       if (run.level > (current.bestLevel || 1)) current.bestLevel = run.level;
       if (current.guest) { current.runs = current.runs || []; current.runs.unshift(run); current.runs = current.runs.slice(0, 200); saveGuest(); return run; }
       api('POST', '/runs', run).then(function (d) { if (d.user) { current.coins = d.user.coins; current.bestScore = d.user.bestScore; current.bestLevel = d.user.bestLevel; current.gamesPlayed = d.user.gamesPlayed; } }).catch(function () {});

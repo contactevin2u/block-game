@@ -65,7 +65,7 @@
     else html += playerColumn(0, 'Your', { goal: this.stage ? this.stage.goal.text : null });
     html += '</div>';
     if (m === 'adventure' || m === 'classic') {
-      html += '<div class="equip-wrap"><div class="equip-head"><span>Equipment</span><span class="muted">' + (isTouch ? 'Tap to use' : 'Press 1 to 5 or tap') + (m === 'classic' ? ' · using one makes the run unranked' : '') + '</span></div><div class="equip-bar">' + C.EQUIPMENT.map(function (e) { return '<button type="button" class="equip" data-equip="' + e.id + '" title="' + esc(e.desc) + '"><span class="equip-key">' + e.key + '</span><span class="equip-name">' + esc(e.name) + '</span><span class="equip-count" data-count="' + e.id + '">0</span></button>'; }).join('') + '</div><p class="equip-empty muted small" hidden>You have no equipment. Buy some with coins in the Shop.</p></div>';
+      html += '<div class="equip-wrap"><div class="equip-head"><span>Equipment</span><span class="muted">' + (isTouch ? 'Tap to use' : 'Press 1 to 5 or tap') + '</span></div><div class="equip-bar">' + C.EQUIPMENT.map(function (e) { return '<button type="button" class="equip" data-equip="' + e.id + '" title="' + esc(e.desc) + '"><span class="equip-key">' + e.key + '</span><span class="equip-name">' + esc(e.name) + '</span><span class="equip-count" data-count="' + e.id + '">0</span></button>'; }).join('') + '</div><p class="equip-empty muted small" hidden>You have no equipment. Buy some with coins in the Shop.</p></div>';
     }
     if (m !== 'local') html += touchControls();
     if (m === 'local') html += '<div class="local-help">' + keyGuide('wasd', 'Player 1 · left board · W A S D') + keyGuide('arrows', 'Player 2 · right board · arrows') + '</div>';
@@ -287,7 +287,7 @@
     this.updateHud(p);
     var g = p.game, canContinue = g.continues === 0;
     var noAds = this.user.purchases.removeAds;
-    var best = g.score > (this.user.bestScore || 0) && m === 'classic' && g.continues === 0;
+    var best = g.score > (this.user.bestScore || 0) && m === 'classic';
     var html = '<div class="panel over">' +
       '<div class="panel-head"><p class="eyebrow danger">' + esc(reason) + '</p><h2>' + (this.stage ? 'Stage failed' : 'Game over') + '</h2></div>' +
       '<div class="hero-score"><span>Score</span><b>' + fmtNum(g.score) + '</b>' + (best ? '<em class="badge">New best</em>' : '') + '</div>' +
@@ -296,7 +296,7 @@
       (canContinue ? '<button type="button" class="btn btn-primary" data-do="continue">Continue<small>' + (noAds ? 'No ad, you own Remove Ads' : 'Watch a ' + C.AD_SECONDS + ' second ad') + ' · clears the top half</small></button>' : '<p class="muted small">No continues left this run.</p>') +
       '<button type="button" class="btn btn-secondary" data-do="restart">Play again</button>' +
       '<button type="button" class="link-btn" data-do="quit">Back to lobby</button></div>' +
-      (m === 'classic' && canContinue ? '<p class="muted small foot-note">A continued run keeps your personal best but is not ranked.</p>' : '') +
+
       '</div>';
     this.setOverlay(html);
     var self = this;
@@ -404,7 +404,6 @@
   GameScreen.prototype.useEquipment = function (id) {
     if ((this.mode !== 'adventure' && this.mode !== 'classic') || this.paused || this.finished || this.ended) return;
     var p = this.players[0], g = p.game;
-    if (this.mode === 'classic' && !this.usedEquipment && this.user.inventory[id] > 0 && id !== 'swap') this.popup(p, 'Assisted run · not ranked');
     if (!(this.user.inventory[id] > 0)) { this.popup(p, 'None left. Buy more in the shop.'); return; }
     var self = this;
     if (id === 'swap') { this.pickSwap(); return; }
