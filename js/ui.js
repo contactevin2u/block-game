@@ -24,9 +24,15 @@
   }
 
   // ---- shared fragments ------------------------------------------------------
+  // Logo at the top left of every screen. Tapping it goes to the lobby.
+  function logo() {
+    return '<a class="logo" href="#/lobby" aria-label="' + esc(C.GAME_NAME) + ', go to lobby">' +
+      '<svg aria-hidden="true" width="26" height="26" viewBox="0 0 26 26"><rect x="9" y="1" width="8" height="8" rx="1.5" fill="#a64ddb"/><rect x="1" y="9" width="8" height="8" rx="1.5" fill="#a64ddb"/><rect x="9" y="9" width="8" height="8" rx="1.5" fill="#a64ddb"/><rect x="17" y="9" width="8" height="8" rx="1.5" fill="#a64ddb"/><rect x="1" y="17" width="8" height="8" rx="1.5" fill="#1ec8e8"/><rect x="9" y="17" width="8" height="8" rx="1.5" fill="#f5d020"/><rect x="17" y="17" width="8" height="8" rx="1.5" fill="#e8453c"/></svg>' +
+      '<span>' + esc(C.GAME_NAME) + '</span></a>';
+  }
   function header(backHash, backLabel, right) {
-    return '<div class="topbar">' + (backHash ? '<a class="back" href="' + backHash + '">&#8249; ' + esc(backLabel || 'Back') + '</a>' : '<span></span>') +
-      (right !== undefined ? right : '<span class="brand">' + esc(C.GAME_NAME) + '</span>') + '</div>';
+    return '<div class="topbar"><div class="topbar-left">' + logo() + (backHash ? '<a class="back" href="' + backHash + '">&#8249; ' + esc(backLabel || 'Back') + '</a>' : '') + '</div>' +
+      (right !== undefined ? right : '<span></span>') + '</div>';
   }
   function logoMark(cell) {
     cell = cell || 18;
@@ -48,10 +54,11 @@
 
   screens.main = function () {
     var u = B.user(), guest = B.isGuest();
+    var top = '<div class="topbar">' + logo() + '<span></span></div>';
     var actions = guest
       ? '<a class="btn btn-primary" href="#/login">Log in</a><a class="btn btn-secondary" href="#/create">Create account</a><a class="link center" href="#/lobby">Play as guest</a>'
       : '<a class="btn btn-primary stack" href="#/lobby">Continue<small>as ' + esc(u.email) + '</small></a><a class="link center" href="#/login">Not you? Log in with another account</a>';
-    return '<div class="hero">' +
+    return top + '<div class="hero">' +
       '<div class="hero-left">' + logoMark(window.innerWidth > 1100 ? 36 : 18) + '<h1 class="title">' + esc(C.GAME_NAME) + '</h1><p class="tagline">Stack. Clear. Climb the board.</p>' +
       '<div class="keys"><span class="kv"><kbd>&#8592;</kbd><kbd>&#8594;</kbd>Move</span><span class="kv"><kbd>&#8595;</kbd>Soft drop</span><span class="kv"><kbd>Space</kbd>Hard drop</span><span class="kv"><kbd>Z</kbd><kbd>X</kbd>Rotate</span><span class="kv"><kbd>C</kbd>Hold</span></div></div>' +
       '<div class="hero-right"><div class="card actions">' + actions + '<p class="muted small center">You stay logged in on this device. After ' + C.SESSION_DAYS + ' days without playing we ask you to log in again.</p></div></div>' +
@@ -163,7 +170,7 @@
   screens.lobby = function () {
     var u = B.user(), guest = B.isGuest(), runs = u.gamesPlayed || 0;
     var adv = u.adventure || { unlocked: 1 };
-    return '<div class="topbar"><span class="brand">' + esc(C.GAME_NAME) + '</span>' + (guest ? '<a class="link" href="#/create">Create account</a>' : '<a class="link muted" href="#/" data-logout>Log out</a>') + '</div>' +
+    return '<div class="topbar">' + logo() + (guest ? '<a class="link" href="#/create">Create account</a>' : '<a class="link muted" href="#/" data-logout>Log out</a>') + '</div>' +
       (guest ? '<div class="notice"><b>Playing as guest</b><p>Progress stays on this device only. <a class="link" href="#/create">Create an account</a> to keep it everywhere.</p></div>' : '<p class="eyebrow">Logged in as</p><h1 class="email">' + esc(u.email) + '</h1>') +
       '<div class="stat-row"><div class="stat-card"><span>Best</span><b>' + (u.bestScore || 0).toLocaleString() + '</b></div><div class="stat-card"><span>Level</span><b>' + (u.bestLevel || 1) + '</b></div><div class="stat-card"><span>Coins</span><b class="accent">' + (u.coins || 0).toLocaleString() + '</b></div></div>' +
       '<div class="modes">' +

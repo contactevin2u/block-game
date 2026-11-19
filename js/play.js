@@ -58,7 +58,7 @@
   GameScreen.prototype.build = function () {
     var m = this.mode, label = { classic: 'Classic', adventure: this.stage ? this.stage.name : 'Adventure', battle: 'Battle · vs computer', local: 'Local 2-player' }[m];
     var html = '<div class="play mode-' + m + ' theme-' + this.theme.id + (this.theme.light ? ' theme-light' : '') + '">' +
-      '<div class="play-top"><button type="button" class="link-btn" data-do="pause">&#10074;&#10074; Pause</button><span class="play-label">' + esc(label) + '</span><button type="button" class="link-btn play-theme" data-do="track" title="Next song">&#9835; <span class="now-playing">' + esc(this.theme.name) + '</span></button></div>' +
+      '<div class="play-top"><div class="topbar-left"><button type="button" class="logo logo-btn" data-do="home" aria-label="' + esc(C.GAME_NAME) + ', open menu"><svg aria-hidden="true" width="22" height="22" viewBox="0 0 26 26"><rect x="9" y="1" width="8" height="8" rx="1.5" fill="#a64ddb"/><rect x="1" y="9" width="8" height="8" rx="1.5" fill="#a64ddb"/><rect x="9" y="9" width="8" height="8" rx="1.5" fill="#a64ddb"/><rect x="17" y="9" width="8" height="8" rx="1.5" fill="#a64ddb"/><rect x="1" y="17" width="8" height="8" rx="1.5" fill="#1ec8e8"/><rect x="9" y="17" width="8" height="8" rx="1.5" fill="#f5d020"/><rect x="17" y="17" width="8" height="8" rx="1.5" fill="#e8453c"/></svg><span>' + esc(C.GAME_NAME) + '</span></button><button type="button" class="link-btn" data-do="pause">&#10074;&#10074; Pause</button></div><span class="play-label">' + esc(label) + '</span><button type="button" class="link-btn play-theme" data-do="track" title="Next song">&#9835; <span class="now-playing">' + esc(this.theme.name) + '</span></button></div>' +
       '<div class="play-area">';
     if (m === 'battle') html += playerColumn(0, 'Your', { attack: true }) + playerColumn(1, 'Opponent', { attack: true });
     else if (m === 'local') html += playerColumn(0, 'Player 1') + playerColumn(1, 'Player 2');
@@ -88,6 +88,8 @@
     this.overlay = this.el.querySelector('.overlay');
     var self = this;
     this.el.querySelector('[data-do="pause"]').addEventListener('click', function () { self.togglePause(); });
+    // The logo opens the pause menu (which has Quit to lobby) instead of leaving mid-run on a stray tap.
+    this.el.querySelector('[data-do="home"]').addEventListener('click', function () { if (self.ended || self.finished) self.exit(); else if (!self.paused) self.togglePause(); });
     this.el.querySelector('[data-do="track"]').addEventListener('click', function () { if (root.Audio) { root.Audio.nextTrack(); self.updateNowPlaying(); } });
     this.nowPlayingTimer = setInterval(function () { self.updateNowPlaying(); }, 2000);
     if (m === 'adventure') {

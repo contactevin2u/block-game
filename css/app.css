@@ -23,6 +23,12 @@ a { color: var(--accent); }
 
 .topbar { display: flex; align-items: center; justify-content: space-between; min-height: 44px; }
 .brand { font-family: var(--font-display); font-weight: 700; font-size: 14px; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); }
+.topbar-left { display: flex; align-items: center; gap: 14px; min-width: 0; }
+.logo { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; text-decoration: none; color: var(--accent); font-family: var(--font-display); font-weight: 700; font-size: 14px; letter-spacing: .08em; text-transform: uppercase; background: none; border: 0; padding: 0; cursor: pointer; white-space: nowrap; }
+.logo svg { flex-shrink: 0; }
+.logo:hover span { text-decoration: underline; }
+.logo-btn { font: inherit; font-family: var(--font-display); font-weight: 700; font-size: 13px; letter-spacing: .08em; text-transform: uppercase; }
+@media (max-width: 420px) { .play-top .logo span { display: none; } }
 .back { color: var(--muted); text-decoration: none; font-weight: 600; display: inline-flex; align-items: center; min-height: 44px; }
 .back:hover { color: var(--ink); }
 .eyebrow { font-family: var(--font-display); font-size: 12px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); font-weight: 700; margin-bottom: -8px; }
