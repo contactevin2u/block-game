@@ -114,19 +114,52 @@
     start: function (t) { tone(1319, t, 0.3, 0.08); }
   };
 
+  // ---- song playback (MP3 from CONFIG.MUSIC). Falls back to the generated pad if no file can play. ----
+  var song = { el: null, track: null, wanted: false, ducked: false, failed: false, fadeTimer: null, index: -1 };
+  var TRACKS = (root.CONFIG && root.CONFIG.MUSIC) || [];
+  function songVolume() { return settings.music ? settings.volume * (song.ducked ? 0.3 : 0.85) : 0; }
+  function fadeTo(target, ms) {
+    if (!song.el) return;
+    clearInterval(song.fadeTimer);
+    var from = song.el.volume, steps = Math.max(1, Math.round(ms / 50)), i = 0;
+    song.fadeTimer = setInterval(function () { i++; song.el.volume = Math.max(0, Math.min(1, from + (target - from) * i / steps)); if (i >= steps) { clearInterval(song.fadeTimer); if (target === 0 && !song.wanted) song.el.pause(); } }, 50);
+  }
+  function pickTrack() { if (!TRACKS.length) return null; song.index = (song.index + 1 + Math.floor(Math.random() * TRACKS.length)) % TRACKS.length; return TRACKS[song.index]; }
+  function playSong() {
+    if (!TRACKS.length || song.failed) { startScheduler(); return; }
+    if (!song.el) {
+      song.el = new root.Audio();
+      song.el.loop = true; song.el.preload = 'auto'; song.el.volume = 0;
+      song.el.addEventListener('error', function () { song.failed = true; if (song.wanted) startScheduler(); });
+      song.track = pickTrack(); song.el.src = song.track.file;
+    }
+    var p = song.el.play();
+    if (p && p.catch) p.catch(function () { /* not allowed yet; unlock() retries on the next gesture */ });
+    fadeTo(songVolume(), 1500);
+  }
+  // The browser refuses play() before the first gesture; retry on the next one.
+  ['pointerdown', 'keydown', 'touchstart'].forEach(function (ev) { root.addEventListener(ev, function () { if (song.wanted && song.el && song.el.paused && !song.failed) playSong(); }, { passive: true }); });
+
   var Audio = {
     apply: function (s) {
       settings.music = s.music !== false && s.sound !== false;
       settings.sfx = s.sfx !== false && s.sound !== false;
       settings.volume = typeof s.volume === 'number' ? Math.max(0, Math.min(1, s.volume)) : 0.7;
+      if (song.el && song.wanted) fadeTo(songVolume(), 300);
       if (!ctx) return;
       master.gain.setTargetAtTime(settings.volume, ctx.currentTime, 0.05);
       musicBus.gain.setTargetAtTime(settings.music ? 1 : 0, ctx.currentTime, 0.2);
       sfxBus.gain.setTargetAtTime(settings.sfx ? 1 : 0, ctx.currentTime, 0.05);
     },
-    startMusic: function () { music.on = true; if (unlocked && ensure()) { if (ctx.state === 'suspended') ctx.resume(); startScheduler(); } },
-    stopMusic: function () { music.on = false; stopScheduler(); },
-    duck: function (on) { if (ctx) musicBus.gain.setTargetAtTime(!settings.music ? 0 : (on ? 0.35 : 1), ctx.currentTime, 0.2); },
+    startMusic: function () {
+      song.wanted = true; music.on = true;
+      if (TRACKS.length && !song.failed) { if (song.el && song.track) { /* keep the same track across restarts */ } playSong(); return; }
+      if (unlocked && ensure()) { if (ctx.state === 'suspended') ctx.resume(); startScheduler(); }
+    },
+    stopMusic: function () { song.wanted = false; music.on = false; stopScheduler(); if (song.el) fadeTo(0, 800); },
+    nextTrack: function () { if (!song.el || !TRACKS.length) return; song.track = pickTrack(); song.el.src = song.track.file; if (song.wanted) playSong(); },
+    nowPlaying: function () { return song.track && !song.failed ? song.track : null; },
+    duck: function (on) { song.ducked = !!on; if (song.el && song.wanted) fadeTo(songVolume(), 400); if (ctx) musicBus.gain.setTargetAtTime(!settings.music ? 0 : (on ? 0.35 : 1), ctx.currentTime, 0.2); },
     sfx: function (name) { if (!settings.sfx || !unlocked || !ensure() || !SFX[name]) return; try { SFX[name](ctx.currentTime); } catch (e) {} },
     preview: function () { unlock(); this.sfx('clear4'); }
   };

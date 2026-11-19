@@ -22,6 +22,10 @@ npm test                    # engine + browser flows
 node test/server.test.js    # starts the real server and runs the API end to end
 ```
 
+## Music
+
+`music/` holds the background songs, listed in `js/config.js` under `MUSIC`. The two included tracks, Easy Lemon and Dreamy Flashback, are by Kevin MacLeod (incompetech.com) under Creative Commons Attribution 4.0, so the credit shown in Settings must stay while they are used. To use your own song, drop an MP3 in `music/`, add it to the list, and remove the ones you no longer want.
+
 ## Change the name
 
 `js/config.js` → `GAME_NAME`, and `<title>` in `index.html`. Or set `GAME_NAME` in `.env` and the server passes it to the game.

@@ -296,7 +296,8 @@
         '<a class="row" href="#/settings/password"><span><span>Password</span><small class="muted">Changed ' + fmtDate(u.passwordChangedAt) + '</small></span><span class="link">Change &#8250;</span></a>') + '</div>' +
       (guest ? '' : '<p class="eyebrow">Session</p><div class="card list"><button type="button" class="row" data-logout><span>Log out on this device</span></button><button type="button" class="row" data-logout-all><span>Log out on all devices</span><small class="muted">' + B.sessionCount() + ' device' + (B.sessionCount() === 1 ? '' : 's') + '</small></button></div>') +
       (testTools() ? '<p class="eyebrow">Test tools</p><div class="card list"><a class="row" href="#/inbox"><span>Test inbox</span><span class="link">Open &#8250;</span></a>' + (isLocal() ? '<button type="button" class="row danger" data-wipe><span>Reset all test data</span></button>' : '') + '</div>' : '') +
-      '<p class="muted small">Appearance applies to menus and screens like this one. The game board always uses your game theme.</p>';
+      '<p class="muted small">Appearance applies to menus and screens like this one. The game board always uses your game theme.</p>' +
+      (C.MUSIC && C.MUSIC.length ? '<p class="eyebrow">Music credits</p><div class="card"><p class="muted small">' + C.MUSIC.map(function (t) { return esc(t.title) + ' by ' + esc(t.artist) + ' (' + esc(t.source) + '), licensed under ' + esc(t.license); }).join('. ') + '.</p></div>' : '');
   };
   screens.settings.bind = function () {
     var u = B.user();

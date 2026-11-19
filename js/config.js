@@ -27,6 +27,12 @@ window.CONFIG = {
     { id: 'boost', name: 'Score Boost', desc: '1.5x score for the rest of the run.', cost: 250, key: '5' }
   ],
   COINS_PER_LINE: 1,
+  // Background music played during games. Add your own MP3s to the music folder and list them here.
+  // These two are by Kevin MacLeod (incompetech.com), Creative Commons Attribution 4.0: the credit in Settings must stay.
+  MUSIC: [
+    { file: 'music/easy-lemon.mp3', title: 'Easy Lemon', artist: 'Kevin MacLeod', license: 'CC BY 4.0', source: 'incompetech.com' },
+    { file: 'music/dreamy-flashback.mp3', title: 'Dreamy Flashback', artist: 'Kevin MacLeod', license: 'CC BY 4.0', source: 'incompetech.com' }
+  ],
   PAYMENT_METHODS: [
     { id: 'tng', name: "Touch 'n Go eWallet", how: 'Opens the TNG app to approve', fee: '1 to 1.5%' },
     { id: 'fpx', name: 'Online banking (FPX)', how: 'Redirects to your bank login', fee: 'RM 1 flat' },

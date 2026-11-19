@@ -58,7 +58,7 @@
   GameScreen.prototype.build = function () {
     var m = this.mode, label = { classic: 'Classic', adventure: this.stage ? this.stage.name : 'Adventure', battle: 'Battle · vs computer', local: 'Local 2-player' }[m];
     var html = '<div class="play mode-' + m + ' theme-' + this.theme.id + (this.theme.light ? ' theme-light' : '') + '">' +
-      '<div class="play-top"><button type="button" class="link-btn" data-do="pause">&#10074;&#10074; Pause</button><span class="play-label">' + esc(label) + '</span><span class="play-theme">' + esc(this.theme.name) + '</span></div>' +
+      '<div class="play-top"><button type="button" class="link-btn" data-do="pause">&#10074;&#10074; Pause</button><span class="play-label">' + esc(label) + '</span><button type="button" class="link-btn play-theme" data-do="track" title="Next song">&#9835; <span class="now-playing">' + esc(this.theme.name) + '</span></button></div>' +
       '<div class="play-area">';
     if (m === 'battle') html += playerColumn(0, 'Your', { attack: true }) + playerColumn(1, 'Opponent', { attack: true });
     else if (m === 'local') html += playerColumn(0, 'Player 1') + playerColumn(1, 'Player 2');
@@ -88,6 +88,8 @@
     this.overlay = this.el.querySelector('.overlay');
     var self = this;
     this.el.querySelector('[data-do="pause"]').addEventListener('click', function () { self.togglePause(); });
+    this.el.querySelector('[data-do="track"]').addEventListener('click', function () { if (root.Audio) { root.Audio.nextTrack(); self.updateNowPlaying(); } });
+    this.nowPlayingTimer = setInterval(function () { self.updateNowPlaying(); }, 2000);
     if (m === 'adventure') {
       Array.prototype.forEach.call(this.el.querySelectorAll('[data-equip]'), function (btn) { btn.addEventListener('click', function () { self.useEquipment(btn.getAttribute('data-equip')); }); });
       this.refreshEquip();
@@ -96,6 +98,13 @@
     window.addEventListener('resize', this.onResize);
     this.onVis = function () { if (document.hidden && self.running && !self.paused && !self.finished) self.togglePause(); };
     document.addEventListener('visibilitychange', this.onVis);
+  };
+
+  GameScreen.prototype.updateNowPlaying = function () {
+    var el = this.el.querySelector('.now-playing'); if (!el) return;
+    var t = root.Audio && root.Audio.nowPlaying();
+    var txt = t && this.user.settings.music !== false ? t.title + ' · ' + t.artist : this.theme.name;
+    if (el.textContent !== txt) el.textContent = txt;
   };
 
   GameScreen.prototype.makePlayer = function (idx, game, keymap) {
@@ -453,6 +462,7 @@
   GameScreen.prototype.exit = function () { this.destroy(); if (this.opts.onExit) this.opts.onExit(); else location.hash = '#/lobby'; };
   GameScreen.prototype.destroy = function () {
     this.running = false; cancelAnimationFrame(this.raf);
+    clearInterval(this.nowPlayingTimer);
     if (root.Audio) root.Audio.stopMusic();
     this.teardownPlayers();
     window.removeEventListener('resize', this.onResize);
