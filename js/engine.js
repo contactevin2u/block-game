@@ -1,4 +1,4 @@
-/* Guideline Tetris engine. Pure logic, no DOM, so it runs in the browser and in Node tests.
+/* Guideline-style block engine. Pure logic, no DOM, so it runs in the browser and in Node tests.
    Board: 10 wide, 22 tall with the top 2 rows hidden. y grows downward. */
 (function (root) {
   'use strict';
@@ -316,7 +316,7 @@
     this.combo++;
     if (this.combo > this.stats.maxCombo) this.stats.maxCombo = this.combo;
     if (tspin) { pts = TSPIN_SCORE[tspin][n] * level; label = (tspin === 'mini' ? 'Mini ' : '') + 'T-spin ' + ['', 'Single', 'Double', 'Triple'][n]; this.stats.tspins++; }
-    else { pts = LINE_SCORE[n] * level; label = ['', 'Single', 'Double', 'Triple', 'Tetris'][n]; if (n === 4) this.stats.tetrises++; }
+    else { pts = LINE_SCORE[n] * level; label = ['', 'Single', 'Double', 'Triple', 'Quad'][n]; if (n === 4) this.stats.tetrises++; }
     var b2bActive = false;
     if (difficult) { this.b2b++; if (this.b2b > 0) { pts = Math.floor(pts * 1.5); b2bActive = true; } }
     else this.b2b = -1;

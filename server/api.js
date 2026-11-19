@@ -234,13 +234,16 @@ r.get('/orders/:id', needUser, async (req, res) => {
 });
 
 // Ask the gateway for the truth about one order and record the answer.
+// Sets settle.reachable to false when the gateway could not be asked (network error, timeout), so callers
+// can tell "not confirmed" apart from "could not check".
 async function settle(o) {
+  settle.reachable = true;
   try {
     const v = await pay.verify(o);
     run('UPDATE orders SET last_checked_at = ? WHERE id = ?', Date.now(), o.id);
     if (v === 'paid') return grant(o.id);
     if (v === 'failed') run('UPDATE orders SET status = ? WHERE id = ?', 'failed', o.id);
-  } catch (e) { console.error('[verify]', o.id, e.message); }
+  } catch (e) { settle.reachable = false; console.error('[verify] gateway unreachable for', o.id, e.message); }
   return row('SELECT * FROM orders WHERE id = ?', o.id);
 }
 
@@ -258,6 +261,8 @@ async function recheckPending() {
   const old = all("SELECT * FROM orders WHERE status IN ('pending','processing') AND created_at <= ?", now - PENDING_EXPIRE_MS);
   for (const o of old) {
     const after = await settle(o);
+    // If the gateway could not be reached, leave the order pending and try again next round.
+    if (!settle.reachable) continue;
     if (after.status === 'pending' || after.status === 'processing') run("UPDATE orders SET status = 'expired', last_error = ? WHERE id = ?", 'expired after a final status check', o.id);
   }
 }

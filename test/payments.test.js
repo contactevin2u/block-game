@@ -15,12 +15,15 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const sha = (parts) => crypto.createHash('sha256').update(parts.join('')).digest('hex');
 
 // ---- fake iPay88: the enquiry endpoint answers per order id ----
-const paidOrders = new Set();
+const paidOrders = new Set(), downOrders = new Set();
 const fake = http.createServer((req, res) => {
   let body = ''; req.on('data', (d) => { body += d; });
   req.on('end', () => {
     const p = new URLSearchParams(body);
-    if (req.url.startsWith('/enquiry')) { res.end(paidOrders.has(p.get('RefNo')) ? '00' : 'Record not found'); return; }
+    if (req.url.startsWith('/enquiry')) {
+      if (downOrders.has(p.get('RefNo'))) { req.socket.destroy(); return; } // gateway unreachable for this order
+      res.end(paidOrders.has(p.get('RefNo')) ? '00' : 'Record not found'); return;
+    }
     res.end('fake entry');
   });
 });
@@ -167,11 +170,16 @@ function callback(order, over) {
   await call('POST', '/auth/signup', { email: 'late@example.com', password: 'password1' });
   const latePaid = (await call('POST', '/orders', { type: 'theme', id: 'glass' })).d.order;
   const lateUnpaid = (await call('POST', '/orders', { type: 'theme', id: 'lcd' })).d.order;
+  const lateDown = (await call('POST', '/orders', { type: 'theme', id: 'ember' })).d.order;
   paidOrders.add(latePaid.id); // paid at the bank, but every callback was lost
+  downOrders.add(lateDown.id); // iPay88 cannot be reached when this one is checked
   await sleep(4500);
   const a = (await call('GET', '/orders/' + latePaid.id)).d, b = (await call('GET', '/orders/' + lateUnpaid.id)).d;
   check('old order confirmed on the final check is granted, not expired', a.order.status === 'paid' && a.user.purchases.themes.includes('glass'));
   check('old order still unconfirmed is expired with no item', b.order.status === 'expired' && !b.user.purchases.themes.includes('lcd'));
+  downOrders.delete(lateDown.id); // the player's own page poll must not settle it either way; read raw status via the job's next round
+  const c = (await call('GET', '/orders/' + lateDown.id)).d;
+  check('old order that could not be checked stays pending, not expired', (c.order.status === 'pending' || c.order.status === 'processing') && /gateway unreachable/.test(s.log()));
 
   s.stop(); fake.close();
   console.log(fails ? fails + ' FAILED' : 'ALL PASSED');

@@ -291,7 +291,7 @@
     var html = '<div class="panel over">' +
       '<div class="panel-head"><p class="eyebrow danger">' + esc(reason) + '</p><h2>' + (this.stage ? 'Stage failed' : 'Game over') + '</h2></div>' +
       '<div class="hero-score"><span>Score</span><b>' + fmtNum(g.score) + '</b>' + (best ? '<em class="badge">New best</em>' : '') + '</div>' +
-      '<div class="stat-strip"><div><span>Lines</span><b>' + g.lines + '</b></div><div><span>Level</span><b>' + g.level + '</b></div><div><span>Tetrises</span><b>' + g.stats.tetrises + '</b></div><div><span>Time</span><b>' + fmtTime(g.time) + '</b></div></div>' +
+      '<div class="stat-strip"><div><span>Lines</span><b>' + g.lines + '</b></div><div><span>Level</span><b>' + g.level + '</b></div><div><span>Quads</span><b>' + g.stats.tetrises + '</b></div><div><span>Time</span><b>' + fmtTime(g.time) + '</b></div></div>' +
       '<div class="panel-actions">' +
       (canContinue ? '<button type="button" class="btn btn-primary" data-do="continue">Continue<small>' + (noAds ? 'No ad, you own Remove Ads' : 'Watch a ' + C.AD_SECONDS + ' second ad') + ' · clears the top half</small></button>' : '<p class="muted small">No continues left this run.</p>') +
       '<button type="button" class="btn btn-secondary" data-do="restart">Play again</button>' +
@@ -320,7 +320,7 @@
     var self = this, left = C.AD_SECONDS, slides = [
       { eyebrow: 'New theme', title: 'Ember Forge', text: 'Cooling iron and open flame. Rows burn out from orange to ash.', price: S.money(C.PRICES.themes.ember), color: '#ff7a1a' },
       { eyebrow: 'Best value', title: 'Everything bundle', text: 'All five themes plus Remove Ads. No more ad breaks like this one.', price: S.money(C.PRICES.bundle), color: '#f2cf1d' },
-      { eyebrow: 'Tip', title: 'Learn the T-spin', text: 'Leave a T-shaped slot and rotate in at the last moment. A T-spin double scores 1200, a Tetris 800.', price: '', color: '#a64ddb' }
+      { eyebrow: 'Tip', title: 'Learn the T-spin', text: 'Leave a T-shaped slot and rotate in at the last moment. A T-spin double scores 1200, a Quad 800.', price: '', color: '#a64ddb' }
     ];
     // Build the panel once; later ticks only touch text and widths, so nothing flashes.
     this.setOverlay('<div class="panel ad"><div class="ad-top"><span class="pill">Ad</span><b class="ad-left"></b></div><div class="ad-bar"><div class="ad-fill" style="width:0%"></div></div>' +
