@@ -50,7 +50,7 @@ app.get('*', (req, res) => res.sendFile(path.join(root, 'index.html')));
 
 const port = parseInt(process.env.PORT || '3000', 10);
 app.listen(port, () => {
-  console.log(`tetris.io server on http://localhost:${port}  payments=${PAY}  email=${EMAIL}${ORIGINS.length ? '  cors=' + ORIGINS.join(',') : ''}`);
+  console.log(`Blokzu server on http://localhost:${port}  payments=${PAY}  email=${EMAIL}${ORIGINS.length ? '  cors=' + ORIGINS.join(',') : ''}`);
   if (PAY === 'mock') console.log('Payments are simulated (development only).');
   if (PAY === 'none') console.log('Purchases are closed: PAYMENT_PROVIDER is not set.');
   console.log('PAYMENTS_ENABLED=' + (PAYMENTS_ENABLED ? 'on' : 'off') + (PAYMENTS_ENABLED ? '' : ': Buy buttons are hidden and orders are refused.'));

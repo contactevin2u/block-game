@@ -1,6 +1,6 @@
 /* Game-wide settings. Change GAME_NAME here once you pick a name. */
 window.CONFIG = {
-  GAME_NAME: 'tetris.io',
+  GAME_NAME: 'Blokzu',
   VERSION: '1.0.0',
   SESSION_DAYS: 30,
   AD_SECONDS: 10,

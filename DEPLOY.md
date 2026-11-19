@@ -58,8 +58,8 @@ For Layout A with a domain, just add `play.yourgame.com` on Render and set `BASE
 ## 5. Real email with Gmail (simplest)
 
 1. In your Google Account go to Security and turn on 2-Step Verification if it is off.
-2. Open https://myaccount.google.com/apppasswords, type a name such as `tetris.io`, click Create, and copy the 16-character password.
-3. On Render set `EMAIL_PROVIDER=gmail`, `GMAIL_USER=you@gmail.com`, `GMAIL_APP_PASSWORD=` the 16 characters, `EMAIL_FROM=tetris.io <you@gmail.com>`.
+2. Open https://myaccount.google.com/apppasswords, type a name such as `Blokzu`, click Create, and copy the 16-character password.
+3. On Render set `EMAIL_PROVIDER=gmail`, `GMAIL_USER=you@gmail.com`, `GMAIL_APP_PASSWORD=` the 16 characters, `EMAIL_FROM=Blokzu <you@gmail.com>`.
 
 Gmail allows about 500 emails a day from a personal account, enough for a start. Move to Brevo or Resend when the game grows.
 
@@ -67,7 +67,7 @@ Gmail allows about 500 emails a day from a personal account, enough for a start.
 
 1. Create a free account at brevo.com. Go to Senders, add your own email address as a sender, and click the verification link Brevo emails you.
 2. Go to SMTP and API, then API Keys, create a key, copy it.
-3. On Render set `EMAIL_PROVIDER=brevo`, `BREVO_API_KEY=xkeysib-...`, `EMAIL_FROM=tetris.io <you@example.com>` using the exact address you verified.
+3. On Render set `EMAIL_PROVIDER=brevo`, `BREVO_API_KEY=xkeysib-...`, `EMAIL_FROM=Blokzu <you@example.com>` using the exact address you verified.
 4. Test: Forgot password. The email arrives in the player's real inbox.
 
 Free plan: 300 emails a day, which covers thousands of players. Later, verifying a domain in Brevo improves deliverability.
@@ -76,7 +76,7 @@ Free plan: 300 emails a day, which covers thousands of players. Later, verifying
 
 1. Create a Resend account, add your domain, add the three DNS records it shows (SPF, DKIM, DMARC) at your registrar, wait for the green tick.
 2. Create an API key.
-3. On Render set `EMAIL_PROVIDER=resend`, `RESEND_API_KEY=re_...`, `EMAIL_FROM=tetris.io <noreply@yourgame.com>`. The From address must be on the verified domain.
+3. On Render set `EMAIL_PROVIDER=resend`, `RESEND_API_KEY=re_...`, `EMAIL_FROM=Blokzu <noreply@yourgame.com>`. The From address must be on the verified domain.
 4. Test: Forgot password. The email arrives in your real inbox within seconds.
 
 Without a domain, Resend can only send to your own email address, which is fine for testing.
