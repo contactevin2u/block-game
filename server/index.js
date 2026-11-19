@@ -50,7 +50,7 @@ app.get('*', (req, res) => res.sendFile(path.join(root, 'index.html')));
 
 const port = parseInt(process.env.PORT || '3000', 10);
 app.listen(port, () => {
-  console.log(`Block Game server on http://localhost:${port}  payments=${PAY}  email=${EMAIL}${ORIGINS.length ? '  cors=' + ORIGINS.join(',') : ''}`);
+  console.log(`tetris.io server on http://localhost:${port}  payments=${PAY}  email=${EMAIL}${ORIGINS.length ? '  cors=' + ORIGINS.join(',') : ''}`);
   if (PAY === 'mock') console.log('Payments are simulated. Set PAYMENT_PROVIDER=chip and the CHIP keys for real payments.');
   if (EMAIL === 'console') console.log('Emails are printed here and shown in the Test inbox. Set EMAIL_PROVIDER=resend and RESEND_API_KEY for real email.');
 });

@@ -1,10 +1,11 @@
 /* Email sending. EMAIL_PROVIDER=brevo or =resend sends real mail; =console logs it and keeps a dev inbox.
    Brevo works with a verified sender address and no domain. Resend needs a verified domain. */
 'use strict';
+global.window = global.window || {}; require('../js/config.js'); const CONFIG = global.window.CONFIG;
 
 const PROVIDER = (process.env.EMAIL_PROVIDER || 'console').toLowerCase();
-const FROM = process.env.EMAIL_FROM || 'Block Game <noreply@example.com>';
-const GAME = process.env.GAME_NAME || 'Block Game';
+const FROM = process.env.EMAIL_FROM || (CONFIG.GAME_NAME + ' <noreply@example.com>');
+const GAME = process.env.GAME_NAME || CONFIG.GAME_NAME;
 const devInbox = [];
 let gmailTransport = null;
 

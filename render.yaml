@@ -20,7 +20,7 @@ services:
       - key: SESSION_DAYS
         value: "30"
       - key: GAME_NAME
-        value: Block Game
+        value: tetris.io
       # Where players open the game. Your Vercel address, or this service's own address.
       - key: BASE_URL
         sync: false
