@@ -17,6 +17,9 @@ h1 { font-size: 30px; } h2 { font-size: 22px; }
 p { margin: 0; }
 a { color: var(--accent); }
 .app { min-height: 100%; }
+/* Lobby background (js/lobby-bg.js): a canvas behind the page; the page sits above it. */
+.lobby-bg { position: fixed; inset: 0; z-index: 0; pointer-events: none; }
+.lobby-bg ~ .app { position: relative; z-index: 1; }
 .app:focus { outline: none; }
 .shell { max-width: 440px; margin: 0 auto; padding: 20px max(16px, env(safe-area-inset-left, 0px)) 40px max(16px, env(safe-area-inset-right, 0px)); display: flex; flex-direction: column; gap: 16px; }
 .full { padding: 0 max(4px, env(safe-area-inset-left, 0px)) 0 max(4px, env(safe-area-inset-right, 0px)); }
