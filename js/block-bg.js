@@ -1,7 +1,7 @@
-/* Lobby background: block pieces drifting down behind the lobby, drawn on one canvas.
-   Colours come from the player's game theme. Faint behind the content column so text stays easy to read.
-   Stops when the player leaves the lobby, pauses while the tab is hidden, and holds still for players who ask
-   their device for reduced motion. */
+/* Menu background: block pieces drifting down behind every screen except the game itself, drawn on one canvas.
+   Colours come from the player's game theme. Faint behind the page's cards and text so they stay easy to read.
+   Removed while a game is on screen, pauses while the tab is hidden, and holds still for players who ask their
+   device for reduced motion. */
 (function (root) {
   'use strict';
   var SHAPES = [
@@ -15,7 +15,7 @@
   ];
   var KEYS = ['I', 'O', 'T', 'S', 'Z', 'J', 'L'];
   var canvas = null, ctx = null, pieces = [], raf = 0, last = 0, w = 0, h = 0, dpr = 1, dark = false, colors = null, still = false;
-  var box = null, frames = 0;                         // where the lobby's cards and text are, in screen pixels
+  var box = null, frames = 0;                         // where the page's cards and text are, in screen pixels
 
   function rnd(a, b) { return a + Math.random() * (b - a); }
   function isDark() {
@@ -45,7 +45,7 @@
     while (pieces.length < want) pieces.push(makePiece(true));
     if (pieces.length > want) pieces.length = want;
   }
-  // Fainter over the lobby's cards and text, so they stay the clearest thing on the page; full strength around them.
+  // Fainter over the page's cards and text, so they stay the clearest thing on the page; full strength around them.
   function measure() {
     var app = document.getElementById('app'), first = app && app.firstElementChild, lastEl = app && app.lastElementChild;
     if (!first || !lastEl) { box = null; return; }
@@ -102,7 +102,7 @@
   function onResize() { if (canvas) { size(); measure(); if (still) frame(performance.now()); } }
   function onVisible() { if (canvas && !still && !document.hidden && !raf) { last = 0; raf = root.requestAnimationFrame(frame); } }
 
-  root.LobbyBg = {
+  root.BlockBg = {
     start: function (themeId) {
       var th = root.Themes && root.Themes.byId(themeId || 'classic');
       colors = (th && th.pieces) || {};
@@ -110,7 +110,7 @@
       still = !!(root.matchMedia && root.matchMedia('(prefers-reduced-motion: reduce)').matches);
       if (!canvas) {
         canvas = document.createElement('canvas');
-        canvas.className = 'lobby-bg'; canvas.setAttribute('aria-hidden', 'true');
+        canvas.className = 'block-bg'; canvas.setAttribute('aria-hidden', 'true');
         document.body.insertBefore(canvas, document.body.firstChild);
         ctx = canvas.getContext('2d');
         pieces = [];

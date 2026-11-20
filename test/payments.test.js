@@ -110,6 +110,15 @@ function callback(order, over) {
   check('owner report lists the pretend purchase with the e-mail', rr.status === 200 && ro && ro.email === 'buyer2@example.com' && ro.provider === 'mock' && ro.status === 'paid' && ro.item === 'neon');
   check('owner report shows what the player holds, no password', rp && rp.themes.includes('neon') && !('pass_hash' in rp) && !JSON.stringify(rd).includes('pass_hash'));
   check('owner report is not cached', rr.headers.get('cache-control') === 'no-store');
+  // ---- payment history (Settings) ----
+  const ph = await dc('GET', '/orders');
+  check('payment history lists the paid purchase', ph.status === 200 && ph.d.orders.length === 1 && ph.d.orders[0].item.id === 'neon' && ph.d.orders[0].status === 'paid' && ph.d.orders[0].provider === 'mock');
+  await dc('POST', '/orders', { type: 'theme', id: 'paper' });
+  check('an unfinished purchase is not in the history', (await dc('GET', '/orders')).d.orders.length === 1);
+  const other = client(s);
+  await other('POST', '/auth/signup', { email: 'nobuy@example.com', password: 'password1' });
+  check('a player with no payments gets an empty history', (await other('GET', '/orders')).d.orders.length === 0);
+  check('payment history needs a login', (await client(s)('GET', '/orders')).status === 401);
   s.stop();
   s = startServer({ RENDER: 'true', PAYMENT_PROVIDER: 'ipay88', IPAY88_MERCHANT_CODE: CODE, IPAY88_MERCHANT_KEY: KEY, DEMO_MODE: 'true' });
   check('DEMO_MODE does not mark a real provider as demo', await waitUp(s) && (await (await fetch(s.base + '/api/health')).json()).demoMode === false); s.stop();

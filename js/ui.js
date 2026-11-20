@@ -179,11 +179,12 @@
     return '<div class="topbar">' + logo() + (guest ? '<a class="link" href="#/create">Create account</a>' : '<a class="link muted" href="#/" data-logout>Log out</a>') + '</div>' +
       (guest ? '<div class="notice"><b>Playing as guest</b><p>Progress stays on this device only. <a class="link" href="#/create">Create an account</a> to keep it everywhere.</p></div>' : '<p class="eyebrow">Logged in as</p><h1 class="email">' + esc(u.email) + '</h1>') +
       '<div class="stat-row"><div class="stat-card"><span>Best</span><b>' + (u.bestScore || 0).toLocaleString() + '</b></div><div class="stat-card"><span>Level</span><b>' + (u.bestLevel || 1) + '</b></div><div class="stat-card"><span>Coins</span><b class="accent">' + (u.coins || 0).toLocaleString() + '</b></div></div>' +
-      '<div class="modes">' +
+      '<p class="eyebrow">Play</p><div class="modes">' +
       '<a class="mode" href="#/play/classic"><span class="pill" style="background:#1ec8e8;color:#0b1020">Ranked</span><b>Classic</b><span>Guideline rules. Endless, speeds up every 10 lines.</span></a>' +
       '<a class="mode" href="#/adventure"><span class="pill" style="background:#f28c1e;color:#0b1020">Stage ' + adv.unlocked + '</span><b>Adventure</b><span>' + A.COUNT + ' stages. Equipment allowed.</span></a>' +
       '<a class="mode" href="#/battle"><span class="pill" style="background:#e8453c;color:#fff">Online</span><b>Battle</b><span>Quick match or a room with friends.</span></a>' +
       '<a class="mode" href="#/history"><span class="pill" style="background:#5fd34a;color:#0b1020">' + runs + ' runs</span><b>History</b><span>Every score and every match.</span></a>' +
+      '</div><p class="eyebrow">Shop &amp; account</p><div class="modes">' +
       '<a class="mode" href="#/shop"><span class="pill" style="background:#a64ddb;color:#fff">6 themes</span><b>Shop</b><span>Themes, Remove Ads, coins, equipment.</span></a>' +
       '<a class="mode" href="#/settings"><span class="pill" style="background:#2b3a6b;color:#e9edf8">Account</span><b>Settings</b><span>Appearance, email, password.</span></a>' +
       '</div>';
@@ -427,6 +428,7 @@
       '<label class="row"><span>Music</span><input type="checkbox" id="music"' + (u.settings.music !== false ? ' checked' : '') + '></label>' +
       '<label class="row"><span>Sound effects</span><input type="checkbox" id="sfx"' + (u.settings.sfx !== false ? ' checked' : '') + '></label>' +
       '<label class="row"><span>Volume</span><input type="range" id="volume" min="0" max="100" value="' + Math.round((typeof u.settings.volume === 'number' ? u.settings.volume : 0.7) * 100) + '" style="width:45%"></label></div>' +
+      '<p class="eyebrow">Payment history</p><div class="card list payhist" id="payhist" aria-live="polite"><div class="row"><span class="muted">Loading</span></div></div>' +
       '<p class="eyebrow">Account</p><div class="card list">' +
       (guest ? '<p class="muted">You are playing as a guest. <a class="link" href="#/create">Create an account</a> to change email or password.</p>' :
         '<a class="row" href="#/settings/email"><span><span>Email</span><small class="muted">' + esc(u.email) + '</small></span><span class="link">Change &#8250;</span></a>' +
@@ -436,8 +438,28 @@
       '<p class="muted small">Appearance applies to menus and screens like this one. The game board always uses your game theme.</p>' +
       (C.MUSIC && C.MUSIC.length ? '<p class="eyebrow">Music credits</p><div class="card"><p class="muted small">' + C.MUSIC.map(function (t) { return esc(t.title) + ' by ' + esc(t.artist) + ' (' + esc(t.source) + '), licensed under ' + esc(t.license); }).join('. ') + '.</p></div>' : '');
   };
+  // Payment history rows: what was bought, when, how, the reference for support, the amount and the status.
+  // A purchase from the old pretend checkout is marked Test: no money was taken.
+  var PAY_NAMES = { dnqr: 'DuitNow QR', card: 'Card', fpx: 'Online banking', tng: "Touch 'n Go", grab: 'GrabPay', shopeepay: 'ShopeePay', boost: 'Boost', ewallet: 'E-wallet', bank: 'Online banking' };
+  function payHistory() {
+    var box = $('#payhist'); if (!box) return;
+    var none = '<div class="row"><span class="muted">No payment made</span></div>';
+    if (B.isGuest() && S.isServer) { box.innerHTML = none; return; }
+    S.listPayments().then(function (list) {
+      if (!$('#payhist')) return;
+      if (!list.length) { box.innerHTML = none; return; }
+      box.innerHTML = list.map(function (o) {
+        var test = o.provider === 'mock' || (!S.isServer);
+        var pill = test ? '<span class="pill">Test</span>' : o.status === 'review' ? '<span class="pill warn">Being checked</span>' : '<span class="pill ok">Paid</span>';
+        var bits = [fmtDate(o.paidAt || o.createdAt), PAY_NAMES[o.method] || o.method || '', test ? 'Test purchase, no money taken' : (o.referenceId || '')].filter(Boolean);
+        return '<div class="row"><span class="payhist-text"><b>' + esc(o.item.name) + '</b><small class="muted">' + esc(bits.join(' \u00b7 ')) + '</small></span>' +
+          '<span class="payhist-amt"><b>' + money(o.item.price) + '</b>' + pill + '</span></div>';
+      }).join('');
+    }).catch(function () { if ($('#payhist')) box.innerHTML = '<div class="row"><span class="muted">Could not load your payments. Try again later.</span></div>'; });
+  }
   screens.settings.bind = function () {
     var u = B.user();
+    payHistory();
     function note() { var m = u.settings.appearance; $('#ap-note').textContent = m === 'system' ? 'Follows your device setting and changes with it.' : 'Always ' + m + ', on every device you log in on.'; }
     note();
     $$('[data-ap]').forEach(function (b) { b.addEventListener('click', function () { u.settings.appearance = b.getAttribute('data-ap'); B.persist(); applyAppearance(u.settings.appearance); $$('[data-ap]').forEach(function (x) { x.classList.toggle('on', x === b); x.setAttribute('aria-pressed', x === b); }); note(); }); });
@@ -623,8 +645,8 @@
     app.className = 'app ' + (fullBleed ? 'full' : 'shell') + (name === 'main' ? ' is-main' : '');
     app.innerHTML = scr(params);
     if (scr.bind) scr.bind(params);
-    // Moving blocks behind the lobby only.
-    if (root.LobbyBg) { if (name === 'lobby') root.LobbyBg.start(((B.user() || {}).settings || {}).theme); else root.LobbyBg.stop(); }
+    // Moving blocks behind every screen except the game itself.
+    if (root.BlockBg) { if (!fullBleed) root.BlockBg.start(((B.user() || {}).settings || {}).theme); else root.BlockBg.stop(); }
     window.scrollTo(0, 0);
     if (!fullBleed) app.focus && app.focus();
   }

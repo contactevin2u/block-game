@@ -58,6 +58,13 @@
       B.saveOrder(o);
       return Promise.resolve({ order: o, checkoutUrl: '#/checkout/' + o.id });
     },
+    // -> Promise<order[]>: payments that went through or are being checked, newest first.
+    listPayments: function () {
+      if (SERVER) return B.api('GET', '/orders').then(function (d) { return d.orders || []; });
+      var u = B.user(), all = B.orders(), out = [];
+      Object.keys(all).forEach(function (k) { var o = all[k]; if (o.userId === u.id && (o.status === 'paid' || o.status === 'review')) out.push(o); });
+      return Promise.resolve(out.sort(function (a, b) { return (b.paidAt || b.createdAt) - (a.paidAt || a.createdAt); }));
+    },
     // -> Promise<order|null>. On the server this also re-verifies pending orders with the gateway.
     getOrder: function (id) {
       if (SERVER) return B.api('GET', '/orders/' + encodeURIComponent(id)).then(function (d) { var u = B.user(); if (d.user && !u.guest) { u.purchases = d.user.purchases; u.coins = d.user.coins; } return d.order; }).catch(function () { return null; });
