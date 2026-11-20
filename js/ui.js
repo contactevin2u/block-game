@@ -623,6 +623,8 @@
     app.className = 'app ' + (fullBleed ? 'full' : 'shell') + (name === 'main' ? ' is-main' : '');
     app.innerHTML = scr(params);
     if (scr.bind) scr.bind(params);
+    // Moving blocks behind the lobby only.
+    if (root.LobbyBg) { if (name === 'lobby') root.LobbyBg.start(((B.user() || {}).settings || {}).theme); else root.LobbyBg.stop(); }
     window.scrollTo(0, 0);
     if (!fullBleed) app.focus && app.focus();
   }
