@@ -1,6 +1,7 @@
 /* REST API. Mirrors the browser backend's functions so the front end switches with no screen changes. */
 'use strict';
 const express = require('express');
+const crypto = require('crypto');
 const { row, all, run, db } = require('./db');
 const auth = require('./auth');
 const email = require('./email');
@@ -403,4 +404,27 @@ r.get('/dev/emails', (req, res) => { if (email.PROVIDER !== 'console') return ba
 r.use((err, req, res, next) => { console.error(err); res.status(500).json({ error: 'Something went wrong on the server.' }); });
 
 r.insertRun = insertRun;
+// ---- owner report (read-only) ---------------------------------------------------------------------------------
+// GET /api/admin/report with "Authorization: Bearer <ADMIN_TOKEN>": every order, pretend (mock) and real, with the
+// player's e-mail, and what each player holds now. Answers 404 unless ADMIN_TOKEN is set to 32 or more characters.
+// It only reads; nothing here changes an order or a player.
+function adminAllowed(req) {
+  const want = String(process.env.ADMIN_TOKEN || '');
+  if (want.length < 32) return null;
+  const got = String(req.headers.authorization || '').replace(/^Bearer\s+/i, '');
+  return crypto.timingSafeEqual(crypto.createHash('sha256').update(got).digest(), crypto.createHash('sha256').update(want).digest());
+}
+r.get('/admin/report', auth.rateLimit('admin-report', 30, 15 * 60000), (req, res) => {
+  const ok = adminAllowed(req);
+  if (ok === null) return bad(res, 'Not found.', 404);
+  if (!ok) return bad(res, 'Not allowed.', 401);
+  res.set('Cache-Control', 'no-store');
+  const orders = all('SELECT o.id, u.email, o.type, o.item_id AS item, o.name, o.price_cents, o.coins, o.status, o.provider, o.method, o.reference_id, o.created_at, o.paid_at, o.last_error FROM orders o LEFT JOIN users u ON u.id = o.user_id ORDER BY o.created_at');
+  const players = all("SELECT u.email, u.created_at, u.coins, u.remove_ads, u.themes, u.inventory, u.games_played, " +
+    "(SELECT COALESCE(SUM(x.coins), 0) FROM runs x WHERE x.user_id = u.id) AS coins_from_games, " +
+    "(SELECT COALESCE(SUM(o.coins), 0) FROM orders o WHERE o.user_id = u.id AND o.status = 'paid') AS coins_bought " +
+    'FROM users u ORDER BY u.created_at').map((p) => Object.assign({}, p, { remove_ads: !!p.remove_ads, themes: j(p.themes, []), inventory: j(p.inventory, {}) }));
+  res.json({ at: Date.now(), orders, players });
+});
+
 module.exports = r;
