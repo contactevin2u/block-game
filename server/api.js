@@ -24,6 +24,7 @@ function validEmail(e) { return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e || '') && e.
 function norm(e) { return String(e || '').toLowerCase().trim(); }
 function j(s, d) { try { return JSON.parse(s); } catch (e) { return d; } }
 function bad(res, msg, code) { return res.status(code || 400).json({ error: msg }); }
+const UNAVAILABLE = 'This way to pay is not available right now. Please choose another.';
 function needUser(req, res, next) { if (!req.user) return bad(res, 'Log in first.', 401); next(); }
 
 function toClient(u) {
@@ -231,10 +232,14 @@ r.post('/orders', needUser, paymentsOpen, auth.rateLimit('orders', 20, 15 * 6000
   const id = 'ord_' + auth.token(6).toUpperCase().replace(/[^A-Z0-9]/g, 'X').slice(0, 8);
   // Boost: the player picks the method in our own picker; one method per Boost page.
   const method = pay.name === 'boost' ? String(req.body.method || '') : null;
-  if (pay.name === 'boost' && !pay.METHODS.includes(method)) return bad(res, 'Pick a payment method.');
+  if (pay.name === 'boost' && !pay.METHODS.includes(method)) {
+    // An option hidden after Boost refused it: say so, and send the options that are still on.
+    if (pay.ALL_METHODS.includes(method)) return res.status(409).json({ error: UNAVAILABLE, methods: pay.METHODS });
+    return bad(res, 'Pick a payment method.');
+  }
   const o = { id, user_id: u.id, type: item.type, item_id: item.id, name: item.name, price_cents: Math.round(item.price * 100), coins: item.coins || 0, status: 'pending', provider: pay.name, provider_ref: null, reference_id: null, method, created_at: Date.now() };
   if (pay.name === 'boost') {
-    // As in AutoCount's portal: the order and its reference are saved BEFORE Boost is asked, so any page Boost
+    // As in our live integration: the order and its reference are saved BEFORE Boost is asked, so any page Boost
     // opens has an order behind it. A failed init leaves the order 'failed'; the reference is never sent again.
     o.reference_id = pay.reference(o.id);
     run('INSERT INTO orders (id, user_id, type, item_id, name, price_cents, coins, status, provider, provider_ref, reference_id, method, created_at, currency) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)', o.id, o.user_id, o.type, o.item_id, o.name, o.price_cents, o.coins, o.status, o.provider, null, o.reference_id, o.method, o.created_at, 'MYR');
@@ -246,6 +251,7 @@ r.post('/orders', needUser, paymentsOpen, auth.rateLimit('orders', 20, 15 * 6000
     } catch (e) {
       run('UPDATE orders SET status = ?, last_error = ? WHERE id = ?', 'failed', ('Boost init: ' + e.message).slice(0, 200), o.id);
       console.error('[orders] boost init', o.id, e.message);
+      if (e.refused) return res.status(409).json({ error: UNAVAILABLE, methods: pay.METHODS });
       return bad(res, 'Could not start the payment. Try again in a moment.', 502);
     }
   }
@@ -260,7 +266,7 @@ r.post('/orders', needUser, paymentsOpen, auth.rateLimit('orders', 20, 15 * 6000
 // ---- Boost Connect -------------------------------------------------------------------
 // The callback is unsigned and the return page is the player's browser: both only trigger a read-back.
 function boostOrderByRef(ref) { return ref ? row('SELECT * FROM orders WHERE reference_id = ? AND provider = ?', String(ref).slice(0, 80), 'boost') : null; }
-const BOOST_RECHECK_GAP_MS = 2000; // AutoCount's portal: a callback or return re-reads an order at most every 2 s
+const BOOST_RECHECK_GAP_MS = 2000; // As in our live integration: a callback or return re-reads an order at most every 2 s
 function boostCheckedRecently(o) { return o.last_checked_at && Date.now() - o.last_checked_at < BOOST_RECHECK_GAP_MS; }
 r.post('/payments/boost/callback', auth.rateLimit('boost-callback', 240, 60000), express.urlencoded({ extended: false }), (req, res) => {
   res.status(200).type('text').send('OK'); // reply at once, then read back

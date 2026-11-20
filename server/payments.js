@@ -115,7 +115,7 @@ function amountToCents(s) {
   const m = String(s == null ? '' : s).trim().match(/^(\d+)\.(\d{2})$/); return m ? parseInt(m[1], 10) * 100 + parseInt(m[2], 10) : null;
 }
 
-// Boost's amount in cents: a number or a numeric string ("12.9", "12.90", 12.9). AutoCount's centsOf does the same.
+// Boost's amount in cents: a number or a numeric string ("12.9", "12.90", 12.9). Our live integration does the same.
 function boostCents(a) {
   if (a === null || a === undefined || typeof a === 'boolean' || String(a).trim() === '') return null;
   const n = Number(a);
@@ -133,11 +133,20 @@ function isReversed(v) {
 // init with a fresh LZ- reference each attempt; the read-back is the only thing that decides a payment.
 const boost = {
   name: 'boost',
-  // DuitNow QR first, as on the AALYX pay page: one QR that any banking or e-wallet app can scan. Then Boost's own
-  // hosted pages: FPX (the player picks the bank on Boost's page), card and Touch 'n Go. The Boost, ShopeePay and
-  // GrabPay wallet pages are offered only when BOOST_EXTRA_METHODS names them: Boost's test profile refused all
-  // three, so each is switched on only after a live check says the merchant has it.
-  METHODS: ['dnqr', 'fpx', 'card', 'tng'].concat(String(process.env.BOOST_EXTRA_METHODS || '').split(',').map((s) => s.trim().toLowerCase()).filter((m, i, a) => ['boost', 'shopeepay', 'grab'].includes(m) && a.indexOf(m) === i)),
+  // Every option Boost Connect offers, in this order: DuitNow QR first (one QR any banking or
+  // e-wallet app can scan), then Boost's own pages: card, FPX (the player picks the bank on Boost's page),
+  // Touch 'n Go, GrabPay, ShopeePay and the Boost wallet. BOOST_METHODS_OFF hides any of them (comma-separated ids).
+  ALL_METHODS: ['dnqr', 'card', 'fpx', 'tng', 'grab', 'shopeepay', 'boost'],
+  // There is no second gateway to fall back on, so an option Boost
+  // refuses (a 400, 403 or 422 on init) is hidden for REFUSED_MS and the player chooses another.
+  REFUSED_STATUSES: [400, 403, 422],
+  REFUSED_MS: 30 * 60000,
+  refusedUntil: {},
+  get METHODS() {
+    const off = String(process.env.BOOST_METHODS_OFF || '').split(',').map((s) => s.trim().toLowerCase());
+    const now = Date.now();
+    return this.ALL_METHODS.filter((m) => !off.includes(m) && !(this.refusedUntil[m] > now));
+  },
   QR_TTL_MS: 5 * 60000, // a DuitNow QR lives five minutes at Boost
   base() { return (process.env.BCPG_BASE_URL || '').replace(/\/+$/, ''); },
   // The signed path is the bare /v1/... path, without the /gateway part of the base URL.
@@ -152,7 +161,7 @@ const boost = {
     let json = null; try { json = text ? JSON.parse(text) : null; } catch (e) {}
     return { status: r.status, json, text };
   },
-  // Same shape as the references AutoCount's portal has used live on this merchant (B2B-118-520FCFBB):
+  // Same shape as the references already used live on this merchant:
   // letters, digits and hyphens only. The order id's underscore is dropped.
   reference(orderId) { return 'LZ-' + String(orderId).replace(/[^A-Za-z0-9]/g, '').toUpperCase() + '-' + crypto.randomBytes(4).toString('hex').toUpperCase(); },
   description(name) { return String(name || 'Linezu purchase').replace(/[^A-Za-z0-9 .-]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 60) || 'Linezu purchase'; },
@@ -176,6 +185,12 @@ const boost = {
     if (order.price_cents <= 0) throw new Error('Amount must be more than 0');
     const body = this.initBody(order, ctx);
     const r = await this.call('POST', '/v1/payments/init', body); // never retried with the same reference
+    if (this.REFUSED_STATUSES.includes(r.status)) {
+      this.refusedUntil[order.method] = Date.now() + this.REFUSED_MS;
+      const e = new Error('Boost refused ' + order.method + ' (' + r.status + ')' + (r.text ? ': ' + r.text.slice(0, 160) : ''));
+      e.refused = order.method;
+      throw e;
+    }
     if (r.status !== 200 || !r.json) throw new Error('Boost init failed ' + r.status + (r.text ? ': ' + r.text.slice(0, 200) : ' (no body)'));
     // An answer for a different reference would be somebody else's payment. (A reply without the echo is accepted,
     // as our live integration does.)
@@ -203,7 +218,7 @@ const boost = {
       if (String(p.uuid || '') !== String(order.provider_ref || '')) problems.push('uuid mismatch');
       const cents = boostCents(p.amount);
       if (cents === null || cents !== order.price_cents) problems.push('amount mismatch: got ' + p.amount + ', expected ' + (order.price_cents / 100).toFixed(2));
-      // A missing currency is MYR, as in AutoCount's portal; only a different currency is a problem.
+      // A missing currency is MYR, as in our live integration; only a different currency is a problem.
       if (String(p.currency || 'MYR').trim().toUpperCase() !== 'MYR') problems.push('currency mismatch: ' + p.currency);
       if (isReversed(p.reversed)) problems.push('reversed (' + String(p.reversed).slice(0, 60) + ')');
       if (problems.length) { this.lastReason = problems.join('; '); return 'review'; }

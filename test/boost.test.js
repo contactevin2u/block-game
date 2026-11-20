@@ -16,6 +16,7 @@ const inits = [];                 // every init received: { ref, body, authOk, p
 const refs = new Map();           // referenceId -> read-back record
 let failInit = null;              // referenceId to answer 500 for
 let badQr = false;                // next DuitNow QR init answers something that is not a PNG
+const refuse = new Set();         // paymentMethods the fake answers 403 for (not switched on for the merchant)
 const PNG_B64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
 function expectedAuth(method, bodyBytes, pathToSign) {
   const mac = crypto.createHmac('sha256', SECRET).update(method + pathToSign + bodyBytes).digest('base64');
@@ -34,6 +35,7 @@ const fake = http.createServer((req, res) => {
       const rec = { ref: b && b.referenceId, body: b, raw, authOk: auth === expectedAuth('POST', raw, bare), signedWithGateway: auth === expectedAuth('POST', raw, path), headersOk, created: b && b.created, amountText: (raw.match(/"amount":([0-9.]+)/) || [])[1] };
       inits.push(rec);
       if (!rec.authOk) { res.writeHead(401); res.end(); return; }
+      if (refuse.has(b.paymentMethod)) { res.writeHead(403); res.end('{"message":"payment method not allowed"}'); return; }
       if (failInit === 'next' || refs.has(b.referenceId)) { failInit = null; res.writeHead(500); res.end('duplicate'); return; }
       const uuid = 'uuid-' + crypto.randomBytes(4).toString('hex');
       refs.set(b.referenceId, { status: 'pending', uuid, amount: b.amount, currency: 'MYR', reversed: false });
@@ -142,10 +144,22 @@ function client(s) {
   const okOrder = r.d.order;
   check('each attempt uses a fresh reference', inits.length === before + 1 && inits[before].ref !== order.referenceId);
 
-  // ---- the pay page's options: DuitNow QR first, then FPX, card, TNG; wallet pages only when switched on ----
+  // ---- the pay page's options: every Boost option, DuitNow QR first ----
   const me0 = (await call('GET', '/me')).d;
-  check('server lists the switched-on options, DuitNow QR first', JSON.stringify(me0.boostMethods) === JSON.stringify(['dnqr', 'fpx', 'card', 'tng']));
-  check('Boost wallet page is refused while not switched on', (await call('POST', '/orders', { type: 'coins', id: 'coins-s', method: 'boost' })).status === 400);
+  check('server lists every option, DuitNow QR first', JSON.stringify(me0.boostMethods) === JSON.stringify(['dnqr', 'card', 'fpx', 'tng', 'grab', 'shopeepay', 'boost']));
+  r = await call('POST', '/orders', { type: 'coins', id: 'coins-s', method: 'grab' });
+  check('GrabPay opens a Boost page', r.status === 200 && r.d.checkoutUrl.startsWith('https://pay.fake-boost.test/') && inits[inits.length - 1].body.paymentMethod === 'grab');
+  // ---- an option Boost refuses is hidden and the player is asked to choose another ----
+  refuse.add('shopeepay');
+  r = await call('POST', '/orders', { type: 'coins', id: 'coins-s', method: 'shopeepay' });
+  check('a refused option says choose another and sends the options still on', r.status === 409 && /choose another/i.test(r.d.error) && JSON.stringify(r.d.methods) === JSON.stringify(['dnqr', 'card', 'fpx', 'tng', 'grab', 'boost']));
+  { const { DatabaseSync } = require('node:sqlite'); const d = new DatabaseSync(s.dbPath); const row = d.prepare('SELECT status, last_error FROM orders WHERE reference_id = ?').get(inits[inits.length - 1].ref); d.close();
+    check('the refused order is failed with the reason', !!row && row.status === 'failed' && /refused shopeepay \(403\)/.test(row.last_error || '')); }
+  check('the refused option is gone from the list', !(await call('GET', '/me')).d.boostMethods.includes('shopeepay'));
+  const initsRefused = inits.length;
+  r = await call('POST', '/orders', { type: 'coins', id: 'coins-s', method: 'shopeepay' });
+  check('a hidden option is not sent to Boost again', r.status === 409 && inits.length === initsRefused);
+  refuse.clear();
   // ---- DuitNow QR: Boost returns the QR picture, there is no page and no returnUrl ----
   r = await call('POST', '/orders', { type: 'coins', id: 'coins-s', method: 'dnqr' });
   const qrInit = inits[inits.length - 1];
@@ -170,7 +184,7 @@ function client(s) {
   r = await call('POST', '/orders', { type: 'theme', id: 'lcd', method: 'card' });
   const failedRef = inits[inits.length - 1].ref;
   check('init 500 is reported, not retried', r.status === 502 && inits.length === initsBefore + 1 && inits.filter((i) => i.ref === failedRef).length === 1);
-  // the order was saved BEFORE Boost was asked, and a failed init leaves it failed (AutoCount's portal rule)
+  // the order was saved BEFORE Boost was asked, and a failed init leaves it failed (our live integration does the same)
   { const { DatabaseSync } = require('node:sqlite'); const d = new DatabaseSync(s.dbPath); const row = d.prepare('SELECT status, last_error FROM orders WHERE reference_id = ?').get(failedRef); d.close();
     check('order row existed before init and is failed after the 500', !!row && row.status === 'failed' && /Boost init/.test(row.last_error || '')); }
   failInit = null;
@@ -220,7 +234,7 @@ function client(s) {
   }
   await reviewCoins('wrong currency', (rec) => { rec.currency = 'USD'; });
   await reviewCoins('reversed', (rec) => { rec.reversed = true; });
-  // read-back shapes AutoCount's portal accepts: no currency field, amount as a string
+  // read-back shapes our live integration accepts: no currency field, amount as a string
   async function paidCoins(name, mutate) {
     const coinsBefore = (await call('GET', '/me')).d.user.coins;
     const o = (await call('POST', '/orders', { type: 'coins', id: 'coins-s', method: 'card' })).d.order;
@@ -256,10 +270,10 @@ function client(s) {
   check('and only once', (await call('GET', '/me')).d.user.coins === coinsBefore + 3200);
 
   s.stop();
-  s = startServer(Object.assign({}, boostEnv, { BOOST_EXTRA_METHODS: 'boost, grab,unknown,boost' }));
-  check('server up with extra wallet pages switched on', await waitUp(s));
+  s = startServer(Object.assign({}, boostEnv, { BOOST_METHODS_OFF: 'boost, GRAB,unknown' }));
+  check('server up with some options switched off', await waitUp(s));
   const me1 = (await client(s)('GET', '/me')).d;
-  check('extra wallet pages listed once, unknown names ignored', JSON.stringify(me1.boostMethods) === JSON.stringify(['dnqr', 'fpx', 'card', 'tng', 'boost', 'grab']));
+  check('BOOST_METHODS_OFF hides those options, unknown names ignored', JSON.stringify(me1.boostMethods) === JSON.stringify(['dnqr', 'card', 'fpx', 'tng', 'shopeepay']));
   s.stop(); fake.close();
   console.log(fails ? fails + ' FAILED' : 'ALL PASSED');
   process.exit(fails ? 1 : 0);

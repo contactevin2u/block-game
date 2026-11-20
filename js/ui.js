@@ -279,14 +279,15 @@
     });
   };
 
-  // ---- Boost Connect pay page, laid out like the AALYX one ----------------------------------------------------
+  // ---- Boost Connect pay page ----------------------------------------------------
   // The order, then every option Boost Connect has switched on for us (the server's boostMethods), each with its logo.
   // DuitNow QR is drawn right here and any banking or e-wallet app can scan it; every other option opens Boost's own
   // secure page (FPX: the player picks the bank there). The item is added only after the server reads the payment
   // back from Boost, never from this page.
+  // In the server's order, only the options that are on.
   function boostMethods() {
     var on = (root.APP_ENV && root.APP_ENV.boostMethods) || [];
-    return C.BOOST_METHODS.filter(function (m) { return on.indexOf(m.id) >= 0; });
+    return on.map(function (id) { return C.BOOST_METHODS.filter(function (m) { return m.id === id; })[0]; }).filter(Boolean);
   }
   function payLogos(m) {
     return '<span class="pay-logos" aria-hidden="true">' + (m.logos || []).map(function (l) { return '<img src="img/pay-methods/' + l + '.svg" alt="" width="44" height="28" loading="lazy">'; }).join('') + '</span>';
@@ -323,7 +324,18 @@
       S.createOrder(item, chosen).then(function (d) {
         if (d.qr) return showQr(item, d);
         location.href = d.checkoutUrl;
-      }).catch(function (err) { pay.disabled = false; pay.textContent = 'Pay ' + money(item.price); toast(err.message, 'warn'); });
+      }).catch(function (err) {
+        pay.disabled = false; pay.textContent = 'Pay ' + money(item.price); toast(err.message, 'warn');
+        // Boost refused this option: take it off the list and select the first one still on.
+        var left = err.data && err.data.methods;
+        if (!left) return;
+        if (root.APP_ENV) root.APP_ENV.boostMethods = left;
+        $$('[data-method]').forEach(function (x) { if (left.indexOf(x.getAttribute('data-method')) < 0) x.remove(); });
+        var next = $('[data-method]');
+        chosen = next ? next.getAttribute('data-method') : null;
+        $$('[data-method]').forEach(function (x) { x.setAttribute('aria-checked', String(x === next)); });
+        if (!next) pay.disabled = true;
+      });
     });
   };
   // DuitNow QR on this page: the QR, the amount, a five-minute countdown, and a check every 3 seconds. When the server

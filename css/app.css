@@ -242,7 +242,7 @@ kbd { display: inline-flex; align-items: center; justify-content: center; min-wi
 }
 @media (max-width: 420px) { .modes { grid-template-columns: 1fr 1fr; } .mode { min-height: 96px; padding: 12px; } .mode b { font-size: 16px; } }
 
-/* Pay page (Boost Connect), laid out like the AALYX pay page */
+/* Pay page (Boost Connect) */
 #paybox { display: flex; flex-direction: column; gap: 16px; }
 .pay-list { display: grid; gap: 10px; }
 .pay-opt { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 64px; padding: 12px 14px; text-align: left; font: inherit; color: var(--ink); background: var(--surface); border: 2px solid var(--line); border-radius: 8px; cursor: pointer; }
