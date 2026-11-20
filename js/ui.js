@@ -304,7 +304,7 @@
         return '<button type="button" class="pay-opt" role="radio" aria-checked="' + (i === 0) + '" data-method="' + m.id + '">' +
           '<span class="pay-dot" aria-hidden="true"></span><span class="pay-text"><b>' + esc(m.name) + '</b><span class="muted small">' + esc(m.how) + '</span></span>' + payLogos(m) + '</button>';
       }).join('') + '</div>' +
-      '<button type="button" class="btn btn-primary" data-pay>Pay ' + money(item.price) + '</button>' : '<p class="lead">Payments are not available right now.</p>') +
+      '<button type="button" class="btn btn-primary" data-pay>Pay ' + money(item.price) + '</button><p id="paynote" class="muted small center" aria-live="polite"></p>' : '<p class="lead">Payments are not available right now.</p>') +
       '<p class="muted small center">Payments are processed securely by Boost Connect. The item is added to your account as soon as the payment is confirmed.</p>' +
       '<a class="link center" href="#/shop">Cancel</a></div>';
   };
@@ -318,14 +318,45 @@
     }); });
     var pay = $('[data-pay]');
     if (!pay) return;
+    var label = 'Pay ' + money(item.price), waiting = null, away = false;
+    function ready() { pay.disabled = false; pay.textContent = label; }
+    // Back from Boost's page or from a wallet app, the browser can show this page exactly as it was left, with the
+    // button still locked. Unlock it, and keep checking the order: a payment made there still takes the player to
+    // the result page.
+    function backHere() {
+      if (!waiting) return;
+      var id = waiting, note = $('#paynote');
+      waiting = null; away = false; ready();
+      if (note) note.innerHTML = 'Already paid? <a class="link" href="#/pay/return/' + encodeURIComponent(id) + '">Check my payment</a>';
+      (function check(n) {
+        if (!document.body.contains(pay) || waiting) return;
+        S.getOrder(id).then(function (o) {
+          if (!document.body.contains(pay) || waiting) return;
+          if (o && (o.status === 'paid' || o.status === 'review')) return go('#/pay/return/' + id);
+          if (o && (o.status === 'failed' || o.status === 'expired')) { if (note) note.textContent = ''; return; }
+          if (n < 300) setTimeout(function () { check(n + 1); }, 3000);
+        });
+      })(0);
+    }
+    function off() { root.removeEventListener('pageshow', onPage); root.removeEventListener('pagehide', onPage); document.removeEventListener('visibilitychange', onPage); }
+    function onPage(e) {
+      if (!document.body.contains(pay)) return off();
+      if (e.type === 'pagehide' || (e.type === 'visibilitychange' && document.visibilityState === 'hidden')) { if (waiting) away = true; return; }
+      if (e.type === 'pageshow' ? e.persisted : (document.visibilityState === 'visible' && away)) backHere();
+    }
+    root.addEventListener('pageshow', onPage); root.addEventListener('pagehide', onPage); document.addEventListener('visibilitychange', onPage);
     pay.addEventListener('click', function () {
       if (!chosen) return;
+      var note = $('#paynote'); if (note) note.textContent = '';
       pay.disabled = true; pay.textContent = chosen === 'dnqr' ? 'Making your QR' : 'Opening the payment page';
       S.createOrder(item, chosen).then(function (d) {
-        if (d.qr) return showQr(item, d);
+        if (d.qr) { off(); return showQr(item, d); }
+        var mine = waiting = d.order.id;
+        // Some phones open the wallet app and leave this page as it was, with no event at all: unlock after a while.
+        setTimeout(function () { if (waiting === mine) backHere(); }, 20000);
         location.href = d.checkoutUrl;
       }).catch(function (err) {
-        pay.disabled = false; pay.textContent = 'Pay ' + money(item.price); toast(err.message, 'warn');
+        ready(); toast(err.message, 'warn');
         // Boost refused this option: take it off the list and select the first one still on.
         var left = err.data && err.data.methods;
         if (!left) return;
