@@ -58,8 +58,8 @@ For Layout A with a domain, just add `play.yourgame.com` on Render and set `BASE
 ## 5. Real email with Gmail (simplest)
 
 1. In your Google Account go to Security and turn on 2-Step Verification if it is off.
-2. Open https://myaccount.google.com/apppasswords, type a name such as `tetris.io`, click Create, and copy the 16-character password.
-3. On Render set `EMAIL_PROVIDER=gmail`, `GMAIL_USER=you@gmail.com`, `GMAIL_APP_PASSWORD=` the 16 characters, `EMAIL_FROM=tetris.io <you@gmail.com>`.
+2. Open https://myaccount.google.com/apppasswords, type a name such as `Linezu`, click Create, and copy the 16-character password.
+3. On Render set `EMAIL_PROVIDER=gmail`, `GMAIL_USER=you@gmail.com`, `GMAIL_APP_PASSWORD=` the 16 characters, `EMAIL_FROM=Linezu <you@gmail.com>`.
 
 Gmail allows about 500 emails a day from a personal account, enough for a start. Move to Brevo or Resend when the game grows.
 
@@ -67,7 +67,7 @@ Gmail allows about 500 emails a day from a personal account, enough for a start.
 
 1. Create a free account at brevo.com. Go to Senders, add your own email address as a sender, and click the verification link Brevo emails you.
 2. Go to SMTP and API, then API Keys, create a key, copy it.
-3. On Render set `EMAIL_PROVIDER=brevo`, `BREVO_API_KEY=xkeysib-...`, `EMAIL_FROM=tetris.io <you@example.com>` using the exact address you verified.
+3. On Render set `EMAIL_PROVIDER=brevo`, `BREVO_API_KEY=xkeysib-...`, `EMAIL_FROM=Linezu <you@example.com>` using the exact address you verified.
 4. Test: Forgot password. The email arrives in the player's real inbox.
 
 Free plan: 300 emails a day, which covers thousands of players. Later, verifying a domain in Brevo improves deliverability.
@@ -76,12 +76,43 @@ Free plan: 300 emails a day, which covers thousands of players. Later, verifying
 
 1. Create a Resend account, add your domain, add the three DNS records it shows (SPF, DKIM, DMARC) at your registrar, wait for the green tick.
 2. Create an API key.
-3. On Render set `EMAIL_PROVIDER=resend`, `RESEND_API_KEY=re_...`, `EMAIL_FROM=tetris.io <noreply@yourgame.com>`. The From address must be on the verified domain.
+3. On Render set `EMAIL_PROVIDER=resend`, `RESEND_API_KEY=re_...`, `EMAIL_FROM=Linezu <noreply@yourgame.com>`. The From address must be on the verified domain.
 4. Test: Forgot password. The email arrives in your real inbox within seconds.
 
 Without a domain, Resend can only send to your own email address, which is fine for testing.
 
-## 6a. Real payments with an existing iPay88 (ADAPTIS) account
+## Demo payments (current setup)
+
+The shop runs a pretend checkout: the player picks E-wallet, Online banking or Card, presses Approve or Cancel, and the item is granted or not. A banner on the shop and checkout says "Demo: no real money is charged". No bank or wallet brands appear, and nothing asks for card numbers, PINs or phone numbers.
+
+Render settings for the demo: , , . Without  the server refuses to start with mock on Render, so a demo can never be mistaken for a live checkout.
+
+To move to real money later, follow the go-live checklist below and section 6a: the iPay88 code is in place and switches on with  plus the keys. Remove  at that point.
+
+## Go-live checklist for real money
+
+Do these in order. Each one protects players' purchases.
+
+1. **Render plan.** Upgrade `block-game-api` to the Starter plan. The Free plan sleeps after 15 minutes, which stops the pending-order re-check job and can make iPay88's server callback fail while the service is waking up.
+2. **Persistent disk.** Add a disk to the service (Disks tab) mounted at `/data`, 1 GB, and set `DB_PATH=/data/game.db`. Without it every deploy wipes all accounts, purchases and orders.
+3. **Daily backup.** In Render open the service's Shell tab and run a scheduled copy, or download `/data/game.db` daily. The simplest reliable option is a Render Cron Job that runs `cp /data/game.db /data/backup-$(date +%u).db` every day, which keeps the last seven days on the disk; download one copy a week to your own computer.
+4. **Payment provider.** `PAYMENT_PROVIDER=ipay88` with `IPAY88_MERCHANT_CODE` and `IPAY88_MERCHANT_KEY`. Mock is refused on Render, and `chip` refuses to start without its keys.
+5. **Sandbox first.** Point `IPAY88_ENTRY_URL` and `IPAY88_REQUERY_URL` at iPay88's sandbox, set `PAYMENTS_ENABLED=true`, and make one full test purchase. Then remove the two sandbox URLs for live.
+6. **Email live.** `EMAIL_PROVIDER` is gmail, brevo or resend, so receipts reach players.
+7. **Switch on.** `PAYMENTS_ENABLED=true` on live keys. Buy the cheapest item yourself with a real payment and check the receipt email and the item on the account.
+8. **Matching payments to money.** Every order stores the iPay88 transaction id, amount in cents, currency, status and time, so each line in iPay88's settlement report can be matched to an order in the database.
+
+## 6. Real payments with Boost Connect (the chosen live provider)
+
+Boost Connect has no sandbox: the first test is a real RM 1 payment, refunded afterwards in Boost's portal.
+
+1. On Render set `PAYMENT_PROVIDER=boost`, `BCPG_BASE_URL=https://api.boostconnect.biz/gateway`, `BCPG_CLIENT_ID=` your client id, and `BCPG_CLIENT_SECRET=` the secret, typed straight into Render. The server refuses to start if any of the three is missing. Keep `PAYMENTS_ENABLED=false` until the test below passes.
+2. `BASE_URL` must be the game's https address and `API_URL` the Render https address. Boost sends the player back to `BASE_URL/api/payments/boost/return?ref=...` and calls `API_URL/api/payments/boost/callback`.
+3. Set `PAYMENTS_ENABLED=true`, buy the cheapest item with each method (Boost, Touch 'n Go, Online banking, Card), check the item arrives exactly once, then refund in the Boost portal.
+
+How it works: the player picks the method in the game, the server opens the payment with Boost using a fresh `LZ-` reference, and the player pays on Boost's page. Boost's callback and the return page only trigger a read-back. The item is granted once, only when the read-back says succeeded with the same uuid, the exact amount in cents, currency MYR and not reversed. A succeeded payment where any detail disagrees is held as REVIEW for a person to check. Pending orders are re-read every 5 minutes, expire 45 minutes after creation, and expired orders are re-read for 3 days so a late success is still granted once.
+
+## 6a. Real payments with an existing iPay88 (ADAPTIS) account (kept in place, unused)
 
 1. Ask iPay88 support to register the game's address on the merchant account (they accept payments only from the website on file). Give them the exact address players use, for example `https://block-game-smoky.vercel.app`, or your custom domain. If the account's current website still needs iPay88, ask for a second merchant account for the game instead.
 2. On Render set `PAYMENT_PROVIDER=ipay88`, `IPAY88_MERCHANT_CODE=` your code, `IPAY88_MERCHANT_KEY=` the key from iPay88's "MERCHANT KEY" email. Keep `BASE_URL` as the game's address and `API_URL` as the Render address.

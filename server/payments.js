@@ -1,8 +1,28 @@
 /* Payment providers. PAYMENT_PROVIDER=chip uses CHIP (chip-in.asia) hosted checkout; =mock simulates it.
    Both expose: createCheckout(order, ctx) -> { checkoutUrl, providerRef } and verify(order) -> 'paid' | 'pending' | 'failed'. */
 'use strict';
+global.window = global.window || {}; require('../js/config.js');
+const GAME_NAME = process.env.GAME_NAME || global.window.CONFIG.GAME_NAME;
 
-const PROVIDER = (process.env.PAYMENT_PROVIDER || 'mock').toLowerCase();
+// Production is any Render service (RENDER=true) or NODE_ENV=production. There, mock may never run and a real
+// provider refuses to start without its keys. Unset in production means 'none': the server runs, purchases are closed.
+const PRODUCTION = process.env.NODE_ENV === 'production' || process.env.RENDER === 'true';
+const PROVIDER = (process.env.PAYMENT_PROVIDER || (PRODUCTION ? 'none' : 'mock')).toLowerCase();
+const PAYMENTS_ENABLED = /^(1|true|yes|on)$/i.test(process.env.PAYMENTS_ENABLED || '');
+// DEMO_MODE=true lets the simulated checkout run on a public server, clearly labelled, with no real money.
+const DEMO_MODE = /^(1|true|yes|on)$/i.test(process.env.DEMO_MODE || '');
+function fatal(msg) { console.error('[payments] ' + msg); process.exit(1); }
+if (PRODUCTION && PROVIDER === 'mock' && !DEMO_MODE) fatal('PAYMENT_PROVIDER=mock is not allowed in production unless DEMO_MODE=true. Set it to none, ipay88 or chip.');
+if (PROVIDER === 'chip' && !(process.env.CHIP_BRAND_ID && process.env.CHIP_SECRET_KEY)) fatal('PAYMENT_PROVIDER=chip needs CHIP_BRAND_ID and CHIP_SECRET_KEY.');
+if (PROVIDER === 'ipay88' && !(process.env.IPAY88_MERCHANT_CODE && process.env.IPAY88_MERCHANT_KEY)) fatal('PAYMENT_PROVIDER=ipay88 needs IPAY88_MERCHANT_CODE and IPAY88_MERCHANT_KEY.');
+if (PROVIDER === 'boost' && !(process.env.BCPG_BASE_URL && process.env.BCPG_CLIENT_ID && process.env.BCPG_CLIENT_SECRET)) fatal('PAYMENT_PROVIDER=boost needs BCPG_BASE_URL, BCPG_CLIENT_ID and BCPG_CLIENT_SECRET.');
+if (!['mock', 'none', 'chip', 'ipay88', 'boost'].includes(PROVIDER)) fatal('Unknown PAYMENT_PROVIDER "' + PROVIDER + '".');
+
+const none = {
+  name: 'none',
+  async createCheckout() { throw new Error('Purchases are not open yet.'); },
+  async verify() { return 'pending'; }
+};
 
 const mock = {
   name: 'mock',
@@ -68,7 +88,7 @@ const ipay88 = {
   startForm(order, ctx) {
     const fields = {
       MerchantCode: this.code(), PaymentId: '', RefNo: order.id, Amount: this.amount(order.price_cents), Currency: 'MYR',
-      ProdDesc: order.name, UserName: ctx.email.split('@')[0].slice(0, 100), UserEmail: ctx.email, UserContact: '-', Remark: 'tetris.io order ' + order.id,
+      ProdDesc: order.name, UserName: ctx.email.split('@')[0].slice(0, 100), UserEmail: ctx.email, UserContact: '-', Remark: (GAME_NAME + ' order ' + order.id).slice(0, 100),
       Lang: 'UTF-8', SignatureType: this.algo.toUpperCase(), Signature: this.requestSignature(order),
       ResponseURL: ctx.baseUrl + '/api/payments/ipay88/response', BackendURL: ctx.apiUrl + '/api/payments/ipay88/backend'
     };
@@ -89,5 +109,125 @@ const ipay88 = {
   }
 };
 
-const provider = PROVIDER === 'chip' ? chip : PROVIDER === 'ipay88' ? ipay88 : mock;
-module.exports = { provider, PROVIDER, ipay88 };
+// Exact cents from an iPay88 amount string such as "12.99". Returns null for anything else: no rounding, no guessing.
+function amountToCents(s) {
+  if (typeof s === 'number') { if (!isFinite(s)) return null; const c = s * 100; return Math.abs(c - Math.round(c)) < 1e-6 ? Math.round(c) : null; }
+  const m = String(s == null ? '' : s).trim().match(/^(\d+)\.(\d{2})$/); return m ? parseInt(m[1], 10) * 100 + parseInt(m[2], 10) : null;
+}
+
+// Boost's amount in cents: a number or a numeric string ("12.9", "12.90", 12.9). Our live integration does the same.
+function boostCents(a) {
+  if (a === null || a === undefined || typeof a === 'boolean' || String(a).trim() === '') return null;
+  const n = Number(a);
+  return Number.isFinite(n) ? Math.round(n * 100) : null;
+}
+// Any value Boost puts in "reversed" counts (true, a date, an id), except an explicit false.
+function isReversed(v) {
+  if (v === undefined || v === null || v === false || v === 0) return false;
+  const t = String(v).trim().toLowerCase();
+  return !(t === '' || t === 'false' || t === '0' || t === 'null');
+}
+
+// Boost Connect (BCPG). Production only, no sandbox: tests run against a fake server set by BCPG_BASE_URL.
+// Rules followed exactly as given: Basic auth over an HMAC of METHOD + bare path + the exact body bytes;
+// init with a fresh LZ- reference each attempt; the read-back is the only thing that decides a payment.
+const boost = {
+  name: 'boost',
+  // Every option Boost Connect offers, in this order: DuitNow QR first (one QR any banking or
+  // e-wallet app can scan), then Boost's own pages: card, FPX (the player picks the bank on Boost's page),
+  // Touch 'n Go, GrabPay, ShopeePay and the Boost wallet. BOOST_METHODS_OFF hides any of them (comma-separated ids).
+  ALL_METHODS: ['dnqr', 'card', 'fpx', 'tng', 'grab', 'shopeepay', 'boost'],
+  // There is no second gateway to fall back on, so an option Boost
+  // refuses (a 400, 403 or 422 on init) is hidden for REFUSED_MS and the player chooses another.
+  REFUSED_STATUSES: [400, 403, 422],
+  REFUSED_MS: 30 * 60000,
+  refusedUntil: {},
+  get METHODS() {
+    const off = String(process.env.BOOST_METHODS_OFF || '').split(',').map((s) => s.trim().toLowerCase());
+    const now = Date.now();
+    return this.ALL_METHODS.filter((m) => !off.includes(m) && !(this.refusedUntil[m] > now));
+  },
+  QR_TTL_MS: 5 * 60000, // a DuitNow QR lives five minutes at Boost
+  base() { return (process.env.BCPG_BASE_URL || '').replace(/\/+$/, ''); },
+  // The signed path is the bare /v1/... path, without the /gateway part of the base URL.
+  sign(method, path, body) {
+    const mac = crypto.createHmac('sha256', process.env.BCPG_CLIENT_SECRET || '').update(method + path + body).digest('base64');
+    return 'Basic ' + Buffer.from((process.env.BCPG_CLIENT_ID || '') + ':' + mac).toString('base64');
+  },
+  async call(method, path, body) {
+    const bytes = body === undefined ? '' : body;
+    const r = await fetch(this.base() + path, { method, headers: { Accept: 'application/json', 'Content-Type': 'application/json', Authorization: this.sign(method, path, bytes) }, body: method === 'GET' ? undefined : bytes, signal: AbortSignal.timeout(parseInt(process.env.BCPG_TIMEOUT_MS || '15000', 10)) });
+    const text = await r.text();
+    let json = null; try { json = text ? JSON.parse(text) : null; } catch (e) {}
+    return { status: r.status, json, text };
+  },
+  // Same shape as the references already used live on this merchant:
+  // letters, digits and hyphens only. The order id's underscore is dropped.
+  reference(orderId) { return 'LZ-' + String(orderId).replace(/[^A-Za-z0-9]/g, '').toUpperCase() + '-' + crypto.randomBytes(4).toString('hex').toUpperCase(); },
+  description(name) { return String(name || 'Linezu purchase').replace(/[^A-Za-z0-9 .-]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 60) || 'Linezu purchase'; },
+  // Body is built by hand so the amount keeps two decimals as a JSON number, and so the signed bytes are the sent bytes.
+  initBody(order, ctx) {
+    const created = new Date(Date.now() - 10000).toISOString(); // Boost's clock runs 8-9 s behind
+    return '{"referenceId":' + JSON.stringify(order.reference_id) +
+      ',"amount":' + (order.price_cents / 100).toFixed(2) +
+      ',"currency":"MYR","created":' + JSON.stringify(created) +
+      ',"description":' + JSON.stringify(this.description(order.name)) +
+      ',"paymentMethod":' + JSON.stringify(order.method) +
+      // DuitNow QR: Boost returns the QR picture (withQrCode) and there is no page to come back from. Every other
+      // method opens Boost's page, which sends the player back to returnUrl.
+      (order.method === 'dnqr' ? ',"withQrCode":true' : ',"returnUrl":' + JSON.stringify(ctx.baseUrl + '/api/payments/boost/return?ref=' + encodeURIComponent(order.reference_id))) +
+      ',"callbackUrl":' + JSON.stringify(ctx.apiUrl + '/api/payments/boost/callback') + '}';
+  },
+  async createCheckout(order, ctx) {
+    if (!this.METHODS.includes(order.method)) throw new Error('Pick a payment method.');
+    if (!/^https:\/\//.test(ctx.baseUrl) || !/^https:\/\//.test(ctx.apiUrl)) throw new Error('BASE_URL and API_URL must be https for Boost');
+    order.reference_id = order.reference_id || this.reference(order.id);
+    if (order.price_cents <= 0) throw new Error('Amount must be more than 0');
+    const body = this.initBody(order, ctx);
+    const r = await this.call('POST', '/v1/payments/init', body); // never retried with the same reference
+    if (this.REFUSED_STATUSES.includes(r.status)) {
+      this.refusedUntil[order.method] = Date.now() + this.REFUSED_MS;
+      const e = new Error('Boost refused ' + order.method + ' (' + r.status + ')' + (r.text ? ': ' + r.text.slice(0, 160) : ''));
+      e.refused = order.method;
+      throw e;
+    }
+    if (r.status !== 200 || !r.json) throw new Error('Boost init failed ' + r.status + (r.text ? ': ' + r.text.slice(0, 200) : ' (no body)'));
+    // An answer for a different reference would be somebody else's payment. (A reply without the echo is accepted,
+    // as our live integration does.)
+    if (r.json.referenceId && r.json.referenceId !== order.reference_id) throw new Error('Boost returned a different referenceId');
+    if (!r.json.uuid) throw new Error('Boost reply has no uuid');
+    if (order.method === 'dnqr') {
+      const b64 = String(r.json.qrBase64 || '').trim();
+      let png = null; try { png = Buffer.from(b64, 'base64'); } catch (e) {}
+      if (!b64 || !png || png.length < 8 || png.toString('latin1', 0, 4) !== '\x89PNG') throw new Error('Boost QR is not a PNG picture');
+      return { checkoutUrl: null, qr: 'data:image/png;base64,' + png.toString('base64'), qrExpiresAt: Date.now() - 10000 + this.QR_TTL_MS, providerRef: String(r.json.uuid), referenceId: order.reference_id };
+    }
+    if (!/^https:\/\//.test(String(r.json.paymentUrl || ''))) throw new Error('Boost paymentUrl is not https');
+    return { checkoutUrl: r.json.paymentUrl, providerRef: String(r.json.uuid), referenceId: order.reference_id };
+  },
+  // Read-back. Returns 'paid' only when everything agrees; 'review' when Boost says succeeded but something does not.
+  async verify(order) {
+    this.lastReason = '';
+    if (!order.reference_id) return 'pending';
+    const r = await this.call('GET', '/v1/payments/refs/' + encodeURIComponent(order.reference_id));
+    if (r.status === 404) return 'pending';
+    if (r.status !== 200 || !r.json) throw new Error('Boost read-back failed ' + r.status);
+    const p = r.json, st = String(p.status || '').toLowerCase();
+    if (st === 'succeeded') {
+      const problems = [];
+      if (String(p.uuid || '') !== String(order.provider_ref || '')) problems.push('uuid mismatch');
+      const cents = boostCents(p.amount);
+      if (cents === null || cents !== order.price_cents) problems.push('amount mismatch: got ' + p.amount + ', expected ' + (order.price_cents / 100).toFixed(2));
+      // A missing currency is MYR, as in our live integration; only a different currency is a problem.
+      if (String(p.currency || 'MYR').trim().toUpperCase() !== 'MYR') problems.push('currency mismatch: ' + p.currency);
+      if (isReversed(p.reversed)) problems.push('reversed (' + String(p.reversed).slice(0, 60) + ')');
+      if (problems.length) { this.lastReason = problems.join('; '); return 'review'; }
+      return 'paid';
+    }
+    if (['canceled', 'cancelled', 'expired', 'failed', 'denied', 'error'].includes(st)) { this.lastReason = 'Boost status ' + st; return 'failed'; }
+    return 'pending';
+  }
+};
+
+const provider = PROVIDER === 'chip' ? chip : PROVIDER === 'ipay88' ? ipay88 : PROVIDER === 'boost' ? boost : PROVIDER === 'none' ? none : mock;
+module.exports = { provider, PROVIDER, PRODUCTION, PAYMENTS_ENABLED, DEMO_MODE: DEMO_MODE && PROVIDER === 'mock', ipay88, boost, amountToCents };

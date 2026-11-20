@@ -20,7 +20,7 @@ services:
       - key: SESSION_DAYS
         value: "30"
       - key: GAME_NAME
-        value: tetris.io
+        value: Linezu
       # Where players open the game. Your Vercel address, or this service's own address.
       - key: BASE_URL
         sync: false
@@ -42,8 +42,19 @@ services:
         sync: false
       - key: EMAIL_FROM
         sync: false
+      # Live payments through Boost Connect (production, real money). BCPG_* are set in the Render dashboard.
       - key: PAYMENT_PROVIDER
-        value: mock
+        value: boost
+      - key: DEMO_MODE
+        value: "false"
+      - key: PAYMENTS_ENABLED
+        value: "true"
+      - key: BCPG_BASE_URL
+        sync: false
+      - key: BCPG_CLIENT_ID
+        sync: false
+      - key: BCPG_CLIENT_SECRET
+        sync: false
       - key: IPAY88_MERCHANT_CODE
         sync: false
       - key: IPAY88_MERCHANT_KEY

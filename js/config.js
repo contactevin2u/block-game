@@ -1,6 +1,6 @@
 /* Game-wide settings. Change GAME_NAME here once you pick a name. */
 window.CONFIG = {
-  GAME_NAME: 'tetris.io',
+  GAME_NAME: 'Linezu',
   VERSION: '1.0.0',
   SESSION_DAYS: 30,
   AD_SECONDS: 10,
@@ -33,10 +33,21 @@ window.CONFIG = {
     { file: 'music/easy-lemon.mp3', title: 'Easy Lemon', artist: 'Kevin MacLeod', license: 'CC BY 4.0', source: 'incompetech.com' },
     { file: 'music/dreamy-flashback.mp3', title: 'Dreamy Flashback', artist: 'Kevin MacLeod', license: 'CC BY 4.0', source: 'incompetech.com' }
   ],
+  // The pay page's options when PAYMENT_PROVIDER=boost, in this order (DuitNow QR leads).
+  // The server says which are switched on (boostMethods); the logos are in img/pay-methods.
+  BOOST_METHODS: [
+    { id: 'dnqr', name: 'DuitNow QR', how: "Scan with any banking or e-wallet app: Boost, Touch 'n Go, GrabPay, MAE and more", logos: ['duitnow-qr'] },
+    { id: 'card', name: 'Credit or debit card', how: 'Visa, Mastercard, MyDebit or UnionPay', logos: ['visa', 'mastercard'] },
+    { id: 'fpx', name: 'Online banking (FPX)', how: 'Choose your bank on the next page', logos: ['fpx'] },
+    { id: 'tng', name: "Touch 'n Go eWallet", how: 'Opens the TNG eWallet to approve', logos: ['tng'] },
+    { id: 'grab', name: 'GrabPay', how: 'Opens GrabPay to approve', logos: ['grabpay'] },
+    { id: 'shopeepay', name: 'ShopeePay', how: 'Opens ShopeePay to approve', logos: ['shopeepay'] },
+    { id: 'boost', name: 'Boost', how: 'Opens the Boost app to approve', logos: ['boost'] }
+  ],
+  // Demo checkout methods. Plain names on purpose: no bank or wallet brands, and nothing asks for real card details.
   PAYMENT_METHODS: [
-    { id: 'tng', name: "Touch 'n Go eWallet", how: 'Opens the TNG app to approve', fee: '1 to 1.5%' },
-    { id: 'fpx', name: 'Online banking (FPX / DuitNow)', how: 'Redirects to your bank login', fee: 'RM 1 flat' },
-    { id: 'card', name: 'Credit or debit card', how: 'Card form, then bank 3-D Secure', fee: '1.8 to 3%' },
-    { id: 'applepay', name: 'Apple Pay', how: 'Face ID or Touch ID', fee: 'As card', appleOnly: true }
+    { id: 'ewallet', name: 'E-wallet', how: 'Demo: approve or cancel on the next screen' },
+    { id: 'bank', name: 'Online banking', how: 'Demo: approve or cancel on the next screen' },
+    { id: 'card', name: 'Card', how: 'Demo: approve or cancel on the next screen' }
   ]
 };

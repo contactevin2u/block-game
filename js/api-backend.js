@@ -11,7 +11,7 @@
 
   function api(method, path, body) {
     return fetch(BASE + '/api' + path, { method: method, credentials: BASE ? 'include' : 'same-origin', headers: body ? { 'Content-Type': 'application/json' } : {}, body: body ? JSON.stringify(body) : undefined })
-      .then(function (r) { return r.json().catch(function () { return {}; }).then(function (d) { if (!r.ok) throw new Error(d.error || ('Request failed (' + r.status + ')')); return d; }); },
+      .then(function (r) { return r.json().catch(function () { return {}; }).then(function (d) { if (!r.ok) { var e = new Error(d.error || ('Request failed (' + r.status + ')')); e.data = d; throw e; } return d; }); },
         function () { throw new Error('Cannot reach the game server. Check your connection and try again.'); });
   }
   function newGuest() {
@@ -39,6 +39,8 @@
         if (d.user) adopt(d); else { if (d.expiredEmail) expiredInfo = { email: d.expiredEmail }; current = guest(); }
         if (d.emailProvider) env.emailProvider = d.emailProvider;
         if (d.provider) env.provider = d.provider;
+        env.paymentsEnabled = !!d.paymentsEnabled; env.demoMode = !!d.demoMode;
+        if (d.boostMethods) env.boostMethods = d.boostMethods;
         return current;
       }).catch(function () { current = guest(); return current; });
     },

@@ -47,7 +47,13 @@
   function validEmail(v) { return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v); }
   function passToggle() { $$('[data-toggle-pass]').forEach(function (b) { b.addEventListener('click', function () { var inp = $('#' + b.getAttribute('data-toggle-pass')); inp.type = inp.type === 'password' ? 'text' : 'password'; b.textContent = inp.type === 'password' ? 'Show' : 'Hide'; }); }); }
   function inboxLink() { return testTools() ? '<p class="muted small center">Email is in test mode: messages appear in the <a href="#/inbox">Test inbox</a>.</p>' : ''; }
-  function paymentsMock() { return isLocal() || !root.APP_ENV || root.APP_ENV.provider !== 'chip'; }
+  function paymentsMock() { return isLocal() || !root.APP_ENV || root.APP_ENV.provider === 'mock'; }
+  // Demo payments: the simulated checkout, shown with a clear banner. True in browser-only mode and when the server runs with DEMO_MODE=true.
+  function demoMode() { return isLocal() || !!(root.APP_ENV && root.APP_ENV.demoMode); }
+  function demoBanner() { return demoMode() ? '<div class="notice demo" role="note"><b>Demo: no real money is charged</b><p>Purchases here are pretend. Nothing is sent to any bank or wallet, and you are never asked for card numbers, PINs or phone numbers.</p></div>' : ''; }
+  // PAYMENTS_ENABLED on the server. Browser-only mode is always "open" because its checkout is simulated.
+  function paymentsOpen() { return isLocal() || !!(root.APP_ENV && root.APP_ENV.paymentsEnabled); }
+  function buyButton(label, attr) { return paymentsOpen() ? '<button type="button" class="btn btn-primary" ' + attr + '>' + label + '</button>' : '<button type="button" class="btn btn-secondary" disabled>Purchases open soon</button>'; }
 
   // ---- screens ------------------------------------------------------------------
   var screens = {};
@@ -216,17 +222,17 @@
       body = '<div class="theme-grid">' + T.list.map(function (th) {
         var owned = S.themeOwned(u, th.id), active = (u.settings.theme || 'classic') === th.id, price = C.PRICES.themes[th.id];
         return '<div class="card theme-card"><canvas class="sample" data-theme-id="' + th.id + '"></canvas><div class="theme-body"><div class="row"><b>' + esc(th.name) + '</b><span class="pill ' + (th.tier === 'free' ? 'free' : owned ? 'owned' : 'paid') + '">' + (th.tier === 'free' ? 'Free' : owned ? 'Owned' : money(price)) + '</span></div><p class="muted small">' + esc(th.tagline) + '</p>' +
-          (owned ? (active ? '<button type="button" class="btn btn-secondary" disabled>In use</button>' : '<button type="button" class="btn btn-primary" data-use="' + th.id + '">Use this theme</button>') : '<button type="button" class="btn btn-primary" data-buy="theme:' + th.id + '">Buy · ' + money(price) + '</button>' + (th.id === 'lcd' ? '<p class="muted small center">Or free at level ' + C.LCD_UNLOCK_LEVEL + '</p>' : '')) + '</div></div>';
+          (owned ? (active ? '<button type="button" class="btn btn-secondary" disabled>In use</button>' : '<button type="button" class="btn btn-primary" data-use="' + th.id + '">Use this theme</button>') : buyButton('Buy · ' + money(price), 'data-buy="theme:' + th.id + '"') + (th.id === 'lcd' ? '<p class="muted small center">Or free at level ' + C.LCD_UNLOCK_LEVEL + '</p>' : '')) + '</div></div>';
       }).join('') + '</div>';
     } else if (tab === 'extras') {
-      body = items.filter(function (i) { return i.type === 'removeAds' || i.type === 'bundle'; }).map(function (i) { return '<div class="card"><div class="row"><b>' + esc(i.name) + '</b><span class="pill ' + (i.owned ? 'owned' : 'paid') + '">' + (i.owned ? 'Owned' : money(i.price)) + '</span></div><p class="muted">' + esc(i.desc) + '</p>' + (i.owned ? '' : '<button type="button" class="btn btn-primary" data-buy="' + i.type + ':' + i.id + '">Buy · ' + money(i.price) + '</button>') + '</div>'; }).join('');
+      body = items.filter(function (i) { return i.type === 'removeAds' || i.type === 'bundle'; }).map(function (i) { return '<div class="card"><div class="row"><b>' + esc(i.name) + '</b><span class="pill ' + (i.owned ? 'owned' : 'paid') + '">' + (i.owned ? 'Owned' : money(i.price)) + '</span></div><p class="muted">' + esc(i.desc) + '</p>' + (i.owned ? '' : buyButton('Buy · ' + money(i.price), 'data-buy="' + i.type + ':' + i.id + '"')) + '</div>'; }).join('');
     } else if (tab === 'coins') {
-      body = '<p class="muted">Coins buy equipment for Adventure. You also earn 1 coin per line cleared and stage rewards.</p>' + items.filter(function (i) { return i.type === 'coins'; }).map(function (i) { return '<div class="card row"><div><b>' + esc(i.name) + '</b><p class="muted small">' + esc(i.desc) + '</p></div><button type="button" class="btn btn-primary slim" data-buy="coins:' + i.id + '">' + money(i.price) + '</button></div>'; }).join('');
+      body = '<p class="muted">Coins buy equipment for Adventure. You also earn 1 coin per line cleared and stage rewards.</p>' + items.filter(function (i) { return i.type === 'coins'; }).map(function (i) { return '<div class="card row"><div><b>' + esc(i.name) + '</b><p class="muted small">' + esc(i.desc) + '</p></div>' + (paymentsOpen() ? '<button type="button" class="btn btn-primary slim" data-buy="coins:' + i.id + '">' + money(i.price) + '</button>' : '<button type="button" class="btn btn-secondary slim" disabled>Soon</button>') + '</div>'; }).join('');
     } else {
       body = '<p class="muted">You have <b class="accent">' + u.coins.toLocaleString() + '</b> coins. Use equipment during Classic or Adventure: press 1 to 5 on a keyboard, or tap the bar under the board.</p>' + C.EQUIPMENT.map(function (e) { return '<div class="card row"><div><b>' + esc(e.name) + '</b> <span class="muted small">× ' + (u.inventory[e.id] || 0) + '</span><p class="muted small">' + esc(e.desc) + '</p></div><button type="button" class="btn btn-secondary slim" data-equip-buy="' + e.id + '">' + e.cost + ' coins</button></div>'; }).join('');
     }
-    return header('#/lobby', 'Lobby', '<span class="muted small">Coins <b class="accent">' + u.coins.toLocaleString() + '</b></span>') + '<h1>Shop</h1><div class="chips">' + tabs + '</div>' + body +
-      (paymentsMock() ? '<p class="muted small center">Payments are in test mode: the checkout is simulated and no money moves.</p>' : '');
+    return header('#/lobby', 'Lobby', '<span class="muted small">Coins <b class="accent">' + u.coins.toLocaleString() + '</b></span>') + '<h1>Shop</h1>' + demoBanner() + '<div class="chips">' + tabs + '</div>' + body +
+      (!paymentsOpen() ? '<p class="muted small center">Purchases open soon. Coins you earn by playing already work for equipment.</p>' : '');
   };
   screens.shop.bind = function (p) {
     $$('.sample').forEach(function (cv) { R.drawSample(cv, T.byId(cv.getAttribute('data-theme-id')), 120); });
@@ -236,6 +242,7 @@
       var item = items.filter(function (i) { return i.type === parts[0] && i.id === parts[1]; })[0];
       if (!item) return;
       if (B.isGuest()) { toast('Create an account first so the purchase is saved to it.', 'warn'); return go('#/create'); }
+      if (root.APP_ENV && root.APP_ENV.provider === 'boost') return go('#/pay/method/' + item.type + '/' + item.id);
       b.disabled = true; b.textContent = 'Starting payment';
       S.createOrder(item).then(function (d) {
         if (/^https?:/i.test(d.checkoutUrl)) location.href = d.checkoutUrl; else go(d.checkoutUrl);
@@ -254,16 +261,16 @@
       if (o.status === 'expired' || o.status === 'cancelled' || o.status === 'failed') { box.innerHTML = header('#/shop', 'Shop') + '<h1>Order ' + o.status + '</h1><p class="lead">Nothing was charged.</p><a class="btn btn-primary" href="#/shop">Back to shop</a>'; return; }
       if (o.status === 'paid') { box.innerHTML = header('#/shop', 'Shop') + '<h1>Already paid</h1><a class="btn btn-primary" href="#/shop">Back to shop</a>'; return; }
       var summary = '<div class="card order"><div class="row"><span class="muted">Order</span><b>' + esc(o.id) + '</b></div><div class="row"><span>' + esc(o.item.name) + '</span><b>' + money(o.item.price) + '</b></div></div>';
-      var gw = '<div class="gateway-bar"><span class="pill">Test gateway</span><span class="muted small">This page stands in for the CHIP hosted checkout</span></div>';
+      var gw = demoBanner();
       if (step === 'method' || o.status === 'pending') {
-        var methods = C.PAYMENT_METHODS.filter(function (m) { return !m.appleOnly || isApple(); });
+        var methods = C.PAYMENT_METHODS;
         box.innerHTML = gw + '<h1>Pay ' + money(o.item.price) + '</h1>' + summary + '<p class="eyebrow">Choose how to pay</p>' +
           methods.map(function (m) { return '<button type="button" class="card method" data-method="' + m.id + '"><b>' + esc(m.name) + '</b><span class="muted small">' + esc(m.how) + '</span></button>'; }).join('') +
           '<button type="button" class="link-btn" data-cancel>Cancel and go back</button>';
       } else {
         var m = C.PAYMENT_METHODS.filter(function (x) { return x.id === o.method; })[0] || C.PAYMENT_METHODS[0];
-        var instr = { tng: 'Open the Touch \'n Go eWallet app on your phone and approve the payment request.', fpx: 'You are now on your bank\'s login page. Log in and approve the transfer.', card: 'Enter your card details, then approve the one-time password from your bank.', applepay: 'Confirm with Face ID or Touch ID.' }[m.id];
-        box.innerHTML = gw + '<h1>' + esc(m.name) + '</h1>' + summary + '<div class="card approve"><p>' + instr + '</p><p class="muted small">In the real flow this screen belongs to the bank or wallet. Approve or cancel below to simulate the result.</p>' +
+        var instr = 'This is a demo payment. Nothing is sent to any bank, wallet or card company. Press Approve to simulate a successful payment, or Cancel to simulate a failed one.';
+        box.innerHTML = gw + '<h1>' + esc(m.name) + '</h1>' + summary + '<div class="card approve"><p>' + instr + '</p>' +
           '<button type="button" class="btn btn-primary" data-approve>Approve payment</button><button type="button" class="btn btn-secondary" data-cancel>Cancel</button></div>';
       }
       $$('[data-method]').forEach(function (b) { b.addEventListener('click', function () { S.choose(id, b.getAttribute('data-method')).then(function () { go('#/checkout/' + id + '/approve'); }); }); });
@@ -271,6 +278,94 @@
       $$('[data-cancel]').forEach(function (b) { b.addEventListener('click', function () { S.cancel(id).then(function () { toast('Payment cancelled. Nothing was charged.'); go('#/shop'); }); }); });
     });
   };
+
+  // ---- Boost Connect pay page ----------------------------------------------------
+  // The order, then every option Boost Connect has switched on for us (the server's boostMethods), each with its logo.
+  // DuitNow QR is drawn right here and any banking or e-wallet app can scan it; every other option opens Boost's own
+  // secure page (FPX: the player picks the bank there). The item is added only after the server reads the payment
+  // back from Boost, never from this page.
+  // In the server's order, only the options that are on.
+  function boostMethods() {
+    var on = (root.APP_ENV && root.APP_ENV.boostMethods) || [];
+    return on.map(function (id) { return C.BOOST_METHODS.filter(function (m) { return m.id === id; })[0]; }).filter(Boolean);
+  }
+  function payLogos(m) {
+    return '<span class="pay-logos" aria-hidden="true">' + (m.logos || []).map(function (l) { return '<img src="img/pay-methods/' + l + '.svg" alt="" width="44" height="28" loading="lazy">'; }).join('') + '</span>';
+  }
+  function payItem(p) { var items = S.catalogue(B.user()); return items.filter(function (i) { return i.type === p[0] && i.id === p[1]; })[0]; }
+  screens.paymethod = function (p) {
+    var item = payItem(p);
+    if (!item) return header('#/shop', 'Shop') + '<h1>Item not found</h1>';
+    var ms = boostMethods();
+    return header('#/shop', 'Shop') + '<h1>Pay ' + money(item.price) + '</h1>' +
+      '<div class="card order"><div class="row"><span>' + esc(item.name) + '</span><b>' + money(item.price) + '</b></div></div>' +
+      '<div id="paybox"><p class="eyebrow">Choose how to pay</p>' +
+      (ms.length ? '<div class="pay-list" role="radiogroup" aria-label="Payment method">' + ms.map(function (m, i) {
+        return '<button type="button" class="pay-opt" role="radio" aria-checked="' + (i === 0) + '" data-method="' + m.id + '">' +
+          '<span class="pay-dot" aria-hidden="true"></span><span class="pay-text"><b>' + esc(m.name) + '</b><span class="muted small">' + esc(m.how) + '</span></span>' + payLogos(m) + '</button>';
+      }).join('') + '</div>' +
+      '<button type="button" class="btn btn-primary" data-pay>Pay ' + money(item.price) + '</button>' : '<p class="lead">Payments are not available right now.</p>') +
+      '<p class="muted small center">Payments are processed securely by Boost Connect. The item is added to your account as soon as the payment is confirmed.</p>' +
+      '<a class="link center" href="#/shop">Cancel</a></div>';
+  };
+  screens.paymethod.bind = function (p) {
+    var item = payItem(p);
+    if (!item) return;
+    var first = boostMethods()[0], chosen = first ? first.id : null;
+    $$('[data-method]').forEach(function (b) { b.addEventListener('click', function () {
+      chosen = b.getAttribute('data-method');
+      $$('[data-method]').forEach(function (x) { x.setAttribute('aria-checked', String(x === b)); });
+    }); });
+    var pay = $('[data-pay]');
+    if (!pay) return;
+    pay.addEventListener('click', function () {
+      if (!chosen) return;
+      pay.disabled = true; pay.textContent = chosen === 'dnqr' ? 'Making your QR' : 'Opening the payment page';
+      S.createOrder(item, chosen).then(function (d) {
+        if (d.qr) return showQr(item, d);
+        location.href = d.checkoutUrl;
+      }).catch(function (err) {
+        pay.disabled = false; pay.textContent = 'Pay ' + money(item.price); toast(err.message, 'warn');
+        // Boost refused this option: take it off the list and select the first one still on.
+        var left = err.data && err.data.methods;
+        if (!left) return;
+        if (root.APP_ENV) root.APP_ENV.boostMethods = left;
+        $$('[data-method]').forEach(function (x) { if (left.indexOf(x.getAttribute('data-method')) < 0) x.remove(); });
+        var next = $('[data-method]');
+        chosen = next ? next.getAttribute('data-method') : null;
+        $$('[data-method]').forEach(function (x) { x.setAttribute('aria-checked', String(x === next)); });
+        if (!next) pay.disabled = true;
+      });
+    });
+  };
+  // DuitNow QR on this page: the QR, the amount, a five-minute countdown, and a check every 3 seconds. When the server
+  // has read the payment back from Boost as paid, the player is taken to the result page.
+  function showQr(item, d) {
+    var box = $('#paybox'); if (!box) return;
+    var orderId = d.order.id, until = d.qrExpiresAt || (Date.now() + 5 * 60000), done = false;
+    box.innerHTML = '<div class="card pay-qr"><p class="eyebrow">DuitNow QR</p><img src="' + esc(d.qr) + '" alt="DuitNow QR code to pay ' + esc(money(item.price)) + '" width="240" height="240">' +
+      '<p class="lead"><b>' + money(item.price) + '</b> to ' + esc(C.GAME_NAME || 'Linezu') + '</p>' +
+      '<p class="muted small">Open any banking or e-wallet app (Boost, Touch \'n Go, GrabPay, MAE and more), scan this code and approve. On a phone, take a screenshot and open it from your banking app.</p>' +
+      '<p id="qrtime" class="small">This code works for 5:00</p><p id="qrstate" class="muted small">Waiting for your payment</p>' +
+      '<a class="link center" href="#/pay/return/' + encodeURIComponent(orderId) + '">I have paid</a></div>' +
+      '<a class="link center" href="#/shop">Back to shop</a>';
+    (function tick() {
+      if (done || !$('#qrtime')) return;
+      var left = Math.max(0, until - Date.now()), mm = Math.floor(left / 60000), ss = Math.floor((left % 60000) / 1000);
+      $('#qrtime').textContent = left > 0 ? 'This code works for ' + mm + ':' + (ss < 10 ? '0' : '') + ss : 'This code has expired. Go back and choose DuitNow QR again for a new one. If you already paid, the item is added automatically.';
+      if (left <= 0) { var img = $('.pay-qr img'); if (img) img.classList.add('expired'); }
+      setTimeout(tick, 1000);
+    })();
+    (function check(n) {
+      if (done || !$('#qrstate')) return;
+      S.getOrder(orderId).then(function (o) {
+        if (!o || !$('#qrstate')) return;
+        if (o.status === 'paid' || o.status === 'review') { done = true; return go('#/pay/return/' + orderId); }
+        if (o.status === 'failed') { done = true; $('#qrstate').textContent = 'This payment did not go through. Nothing was charged.'; return; }
+        if (Date.now() < until + 15 * 60000 && n < 400) setTimeout(function () { check(n + 1); }, 3000);
+      }).catch(function () { setTimeout(function () { check(n + 1); }, 5000); });
+    })(0);
+  }
 
   screens.payreturn = function (p) {
     return '<div class="center pad"><div class="ring spin">&#8635;</div><h1 id="h">Checking your payment</h1><p class="lead" id="msg">Waiting for the bank to confirm. This usually takes a few seconds.</p><div id="done" hidden><a class="btn btn-primary" href="#/shop">Back to shop</a><a class="link center" href="#/lobby">Go to lobby</a></div></div>';
@@ -281,6 +376,8 @@
       if (!$('#h')) return;
       $('.ring').classList.remove('spin');
       if (o && o.status === 'paid') { $('.ring').innerHTML = '&#10003;'; $('.ring').classList.add('good'); $('#h').textContent = 'Payment received'; $('#msg').textContent = o.item.name + ' is now on your account. A receipt for order ' + o.id + ' was sent to your email.'; }
+      else if (o && o.status === 'review') { $('#h').textContent = 'Payment received, being checked'; $('#msg').textContent = 'Your payment reached us but a detail did not match, so a person will check it. The item is added once that is done. Nothing is charged twice.'; }
+      else if (o && o.status === 'expired') { $('#h').textContent = 'Payment page expired'; $('#msg').textContent = 'The payment page was not completed in time. If you did pay, the item is added automatically once the payment is confirmed, within a few minutes. Otherwise nothing was charged.'; }
       else if (o && (o.status === 'pending' || o.status === 'processing')) { $('#h').textContent = 'Still waiting for the bank'; $('#msg').textContent = 'Your payment has not been confirmed yet. If you completed it, the item will appear on your account within a few minutes. Nothing is charged twice.'; }
       else { $('.ring').innerHTML = '&#10005;'; $('#h').textContent = 'Payment not completed'; $('#msg').textContent = 'The bank did not confirm this order. Nothing was charged.'; }
       $('#done').hidden = false;
@@ -477,7 +574,7 @@
   var routes = [
     [/^\/?$/, 'main'], [/^\/login(?:\/(expired))?$/, 'login'], [/^\/create$/, 'create'], [/^\/forgot$/, 'forgot'], [/^\/reset\/([^/]+)$/, 'reset'], [/^\/confirm-email\/([^/]+)$/, 'confirm-email'], [/^\/inbox$/, 'inbox'],
     [/^\/lobby$/, 'lobby'], [/^\/adventure$/, 'adventure'], [/^\/play\/(classic)$/, 'play'], [/^\/play\/(adventure)\/(\d+)$/, 'play'],
-    [/^\/shop(?:\/(themes|extras|coins|equipment))?$/, 'shop'], [/^\/checkout\/([^/]+)(?:\/(approve))?$/, 'checkout'], [/^\/pay\/return\/([^/]+)$/, 'payreturn'],
+    [/^\/shop(?:\/(themes|extras|coins|equipment))?$/, 'shop'], [/^\/checkout\/([^/]+)(?:\/(approve))?$/, 'checkout'], [/^\/pay\/return\/([^/]+)$/, 'payreturn'], [/^\/pay\/method\/(removeAds|bundle|theme|coins)\/([a-z0-9-]+)$/, 'paymethod'],
     [/^\/settings$/, 'settings'], [/^\/settings\/email$/, 'settingsemail'], [/^\/settings\/password$/, 'settingspassword'],
     [/^\/history(?:\/(all|classic|adventure|battle))?$/, 'history'],
     [/^\/battle$/, 'battle'], [/^\/battle\/join\/([A-Za-z0-9]{6})$/, 'battle'], [/^\/battle\/quick$/, 'battlequick'], [/^\/battle\/local$/, 'battlelocal'], [/^\/battle\/online$/, 'battleonline']
@@ -500,6 +597,7 @@
   }
 
   root.UI = {
+    screens: screens,
     init: function () {
       app = document.getElementById('app');
       app.innerHTML = '<p class="muted center pad">Loading</p>';

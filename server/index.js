@@ -9,7 +9,7 @@ const envFile = path.join(__dirname, '..', '.env');
 if (fs.existsSync(envFile)) fs.readFileSync(envFile, 'utf8').split(/\r?\n/).forEach((l) => { const m = l.match(/^\s*([A-Z0-9_]+)\s*=\s*(.*?)\s*$/); if (m && !(m[1] in process.env)) process.env[m[1]] = m[2].replace(/^["']|["']$/g, ''); });
 
 const api = require('./api');
-const { PROVIDER: PAY } = require('./payments');
+const { PROVIDER: PAY, PAYMENTS_ENABLED, DEMO_MODE } = require('./payments');
 const { PROVIDER: EMAIL } = require('./email');
 
 const app = express();
@@ -41,7 +41,7 @@ app.use((req, res, next) => {
 // Tells the front end to use the API instead of the browser-only backend.
 app.get('/env.js', (req, res) => {
   res.type('application/javascript').set('Cache-Control', 'no-store');
-  res.send('window.APP_ENV=' + JSON.stringify({ mode: 'server', provider: PAY, emailProvider: EMAIL, gameName: process.env.GAME_NAME || null }) + ';');
+  res.send('window.APP_ENV=' + JSON.stringify({ mode: 'server', provider: PAY, paymentsEnabled: PAYMENTS_ENABLED && PAY !== 'none', demoMode: DEMO_MODE, boostMethods: PAY === 'boost' ? require('./payments').boost.METHODS : undefined, emailProvider: EMAIL, gameName: process.env.GAME_NAME || null }) + ';');
 });
 
 let realtime = null;
@@ -54,7 +54,9 @@ const port = parseInt(process.env.PORT || '3000', 10);
 const server = require('http').createServer(app);
 realtime = require('./realtime').attach(server, { insertRun: api.insertRun });
 server.listen(port, () => {
-  console.log(`tetris.io server on http://localhost:${port}  payments=${PAY}  email=${EMAIL}${ORIGINS.length ? '  cors=' + ORIGINS.join(',') : ''}`);
-  if (PAY === 'mock') console.log('Payments are simulated. Set PAYMENT_PROVIDER=chip and the CHIP keys for real payments.');
+  console.log(`Linezu server on http://localhost:${port}  payments=${PAY}  email=${EMAIL}${ORIGINS.length ? '  cors=' + ORIGINS.join(',') : ''}`);
+  if (PAY === 'mock') console.log(DEMO_MODE ? 'DEMO MODE: payments are simulated and labelled as a demo. No real money.' : 'Payments are simulated (development only).');
+  if (PAY === 'none') console.log('Purchases are closed: PAYMENT_PROVIDER is not set.');
+  console.log('PAYMENTS_ENABLED=' + (PAYMENTS_ENABLED ? 'on' : 'off') + (PAYMENTS_ENABLED ? '' : ': Buy buttons are hidden and orders are refused.'));
   if (EMAIL === 'console') console.log('Emails are printed here and shown in the Test inbox. Set EMAIL_PROVIDER=resend and RESEND_API_KEY for real email.');
 });
