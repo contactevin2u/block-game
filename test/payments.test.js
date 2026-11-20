@@ -89,6 +89,27 @@ function callback(order, over) {
   let dr = await dc('POST', '/orders', { type: 'theme', id: 'neon' });
   check('demo order goes to the simulated checkout', dr.status === 200 && dr.d.checkoutUrl.includes('/#/checkout/'));
   check('me reports demo mode to the client', (await dc('GET', '/me')).d.demoMode === true);
+  check('owner report is off without ADMIN_TOKEN', (await fetch(s.base + '/api/admin/report')).status === 404);
+  s.stop();
+  // ---- owner report: read-only, locked by ADMIN_TOKEN ----
+  const ADMIN = 'a'.repeat(20) + 'report-token-123456';
+  s = startServer({ RENDER: 'true', PAYMENT_PROVIDER: 'mock', DEMO_MODE: 'true', PAYMENTS_ENABLED: 'true', ADMIN_TOKEN: ADMIN });
+  check('server up with an owner report token', await waitUp(s));
+  dc = client(s);
+  await dc('POST', '/auth/signup', { email: 'buyer2@example.com', password: 'password1' });
+  dr = await dc('POST', '/orders', { type: 'theme', id: 'neon' });
+  await dc('POST', '/orders/' + dr.d.order.id + '/mock', { action: 'choose', method: 'tng' });
+  await dc('POST', '/orders/' + dr.d.order.id + '/mock', { action: 'approve' });
+  await sleep(2200);
+  const rep = (auth) => fetch(s.base + '/api/admin/report', { headers: auth ? { Authorization: auth } : {} });
+  check('owner report refuses no key', (await rep()).status === 401);
+  check('owner report refuses a wrong key', (await rep('Bearer ' + ADMIN + 'x')).status === 401);
+  check('a logged-in player cannot read it', (await dc('GET', '/admin/report')).status === 401);
+  const rr = await rep('Bearer ' + ADMIN), rd = await rr.json();
+  const ro = rd.orders.find((o) => o.id === dr.d.order.id), rp = rd.players.find((p) => p.email === 'buyer2@example.com');
+  check('owner report lists the pretend purchase with the e-mail', rr.status === 200 && ro && ro.email === 'buyer2@example.com' && ro.provider === 'mock' && ro.status === 'paid' && ro.item === 'neon');
+  check('owner report shows what the player holds, no password', rp && rp.themes.includes('neon') && !('pass_hash' in rp) && !JSON.stringify(rd).includes('pass_hash'));
+  check('owner report is not cached', rr.headers.get('cache-control') === 'no-store');
   s.stop();
   s = startServer({ RENDER: 'true', PAYMENT_PROVIDER: 'ipay88', IPAY88_MERCHANT_CODE: CODE, IPAY88_MERCHANT_KEY: KEY, DEMO_MODE: 'true' });
   check('DEMO_MODE does not mark a real provider as demo', await waitUp(s) && (await (await fetch(s.base + '/api/health')).json()).demoMode === false); s.stop();
