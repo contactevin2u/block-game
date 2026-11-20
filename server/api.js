@@ -283,6 +283,11 @@ r.get('/payments/boost/return', async (req, res) => {
   res.redirect(baseUrl(req) + '/#/pay/return/' + o.id);
 });
 
+// Payment history: the player's payments that went through (paid) or are being checked (review), newest first.
+r.get('/orders', needUser, (req, res) => {
+  const list = all("SELECT * FROM orders WHERE user_id = ? AND status IN ('paid', 'review') ORDER BY COALESCE(paid_at, created_at) DESC LIMIT 100", req.user.id);
+  res.json({ orders: list.map(orderToClient) });
+});
 r.get('/orders/:id', needUser, async (req, res) => {
   let o = row('SELECT * FROM orders WHERE id = ? AND user_id = ?', req.params.id, req.user.id);
   if (!o) return bad(res, 'Order not found.', 404);
